@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -42,20 +43,92 @@ class LLMStructuredOutputError(LLMError):
     pass
 
 
+def _scan_json_values(text: str) -> list[dict[str, Any] | list[Any]]:
+    decoder = json.JSONDecoder()
+    pos = 0
+    length = len(text)
+    values: list[dict[str, Any] | list[Any]] = []
+    while pos < length:
+        next_brace = text.find("{", pos)
+        next_bracket = text.find("[", pos)
+        if next_brace == -1 and next_bracket == -1:
+            break
+        if next_brace != -1 and (next_bracket == -1 or next_brace < next_bracket):
+            candidate_pos = next_brace
+        else:
+            candidate_pos = next_bracket
+        try:
+            val, end_idx = decoder.raw_decode(text, candidate_pos)
+            if isinstance(val, (dict, list)):
+                values.append(val)
+                pos = end_idx
+                continue
+            else:
+                pos = candidate_pos + 1
+        except json.JSONDecodeError:
+            pos = candidate_pos + 1
+    return values
+
+
 def parse_json(content: Any) -> dict[str, Any]:
-    """Extract and parse JSON object from LLM response text or content list."""
+    """Extract and parse JSON object or array from LLM response text or content list.
+
+    Correctly handles:
+    - Pure JSON objects and JSON arrays
+    - Surrounding whitespace
+    - Markdown ```json code fences
+    - Harmless surrounding commentary when unambiguous
+    - Detects multiple JSON values and raises LLMStructuredOutputError
+    """
     if isinstance(content, list):
         content = "".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
     text = str(content or "").strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[-1].rsplit("```", 1)[0]
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        raise LLMStructuredOutputError(f"Model did not return JSON: {text[:200]}")
-    try:
-        return json.loads(text[start : end + 1])
-    except json.JSONDecodeError as exc:
-        raise LLMStructuredOutputError(f"Model returned invalid JSON: {exc}: {text[:200]}") from exc
+
+    # Fast path: pure JSON object or array
+    if (text.startswith("{") and text.endswith("}")) or (text.startswith("[") and text.endswith("]")):
+        try:
+            data = json.loads(text)
+            if isinstance(data, list):
+                return {"clips": data}
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+
+    # If markdown code fence is present, attempt extraction from the code block(s)
+    pattern = r"```(?:[a-zA-Z0-9_-]+)?\s*\n?(.*?)\n?```"
+    fenced_blocks = [m.strip() for m in re.findall(pattern, text, re.DOTALL) if m.strip()]
+    if fenced_blocks:
+        fenced_values: list[dict[str, Any] | list[Any]] = []
+        for block in fenced_blocks:
+            fenced_values.extend(_scan_json_values(block))
+        if len(fenced_values) > 1:
+            raise LLMStructuredOutputError(
+                f"Model returned multiple JSON values ({len(fenced_values)} values found in code blocks). "
+                f"Expected a single JSON object."
+            )
+        if len(fenced_values) == 1:
+            val = fenced_values[0]
+            return {"clips": val} if isinstance(val, list) else val
+
+    # Scan the full text
+    values = _scan_json_values(text)
+    if len(values) > 1:
+        raise LLMStructuredOutputError(
+            f"Model returned multiple JSON values ({len(values)} values found). "
+            f"Expected a single JSON object."
+        )
+    if len(values) == 1:
+        val = values[0]
+        return {"clips": val} if isinstance(val, list) else val
+
+    if "{" in text or "[" in text:
+        try:
+            json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise LLMStructuredOutputError(f"Model returned invalid JSON: {exc}: {text[:200]}") from exc
+        raise LLMStructuredOutputError(f"Model returned invalid JSON: {text[:200]}")
+    raise LLMStructuredOutputError(f"Model did not return JSON: {text[:200]}")
 
 
 class LLMProvider(ABC):

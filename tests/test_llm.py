@@ -4,7 +4,14 @@ import httpx
 import pytest
 
 from clipyyy import db
-from clipyyy.llm import PROVIDERS, LLMError, OpenAICompatibleLLM, get_llm, parse_json
+from clipyyy.llm import (
+    PROVIDERS,
+    LLMError,
+    LLMStructuredOutputError,
+    OpenAICompatibleLLM,
+    get_llm,
+    parse_json,
+)
 
 
 def make_llm(handler):
@@ -54,8 +61,32 @@ def test_errors_are_raised():
 
 def test_parse_json_handles_prose():
     assert parse_json('Here you go: {"a": 1} thanks') == {"a": 1}
+    assert parse_json('[{"rank": 1}]') == {"clips": [{"rank": 1}]}
     with pytest.raises(LLMError):
         parse_json("no json here")
+
+
+def test_parse_json_regression_valid_and_multiple():
+    # Valid object
+    assert parse_json('{"clips":[]}') == {"clips": []}
+
+    # Valid array
+    assert parse_json('[{"start":1,"end":5}]') == {"clips": [{"start": 1, "end": 5}]}
+
+    # Valid fenced JSON
+    assert parse_json('```json\n{"clips":[]}\n```') == {"clips": []}
+
+    # Multiple JSON objects produce a clear structured-output error rather than JSONDecodeError
+    with pytest.raises(LLMStructuredOutputError, match="multiple JSON values"):
+        parse_json('{"clips":[]}\n{"clips":[]}')
+
+    # Multiple JSON arrays produce a clear structured-output error rather than JSONDecodeError
+    with pytest.raises(LLMStructuredOutputError, match="multiple JSON values"):
+        parse_json('[{"start":1,"end":5}]\n[{"start":10,"end":15}]')
+
+    # Mixed multiple values
+    with pytest.raises(LLMStructuredOutputError, match="multiple JSON values"):
+        parse_json('{"clips":[]}\n[{"start":1,"end":5}]')
 
 
 def test_get_llm_requires_key_and_uses_settings():

@@ -43,6 +43,10 @@ class DeepSeekProvider(OpenAICompatibleProvider):
             timeout=timeout,
         )
 
+    def _build_response_format(self, schema: dict[str, Any], name: str) -> dict[str, Any] | None:
+        """DeepSeek Chat Completions API supports {"type": "json_object"} rather than "json_schema"."""
+        return {"type": "json_object"}
+
     def list_models(self) -> list[dict[str, Any]]:
         """Fetch available models from DeepSeek API, with sensible fallbacks."""
         try:
@@ -61,6 +65,8 @@ class DeepSeekProvider(OpenAICompatibleProvider):
 
         # Fallback to standard known DeepSeek models if listing fails or returns empty
         return [
+            {"id": "deepseek-flash", "name": "deepseek-flash (DeepSeek-V4.1-Flash)"},
+            {"id": "deepseek-v4-pro", "name": "deepseek-v4-pro (DeepSeek-V4-Pro)"},
             {"id": "deepseek-chat", "name": "deepseek-chat (DeepSeek-V3)"},
             {"id": "deepseek-reasoner", "name": "deepseek-reasoner (DeepSeek-R1)"},
         ]

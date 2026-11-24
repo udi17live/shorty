@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any
 
@@ -15,11 +16,14 @@ from clipyyy.providers.base import (
     LLMModelNotFoundError,
     LLMProvider,
     LLMRateLimitError,
+    LLMStructuredOutputError,
     LLMTimeoutError,
     parse_json,
 )
 
 logger = logging.getLogger(__name__)
+
+_SECRET_PATTERN = re.compile(r"(?:Bearer\s+|sk-)[a-zA-Z0-9_\-]{6,}", re.IGNORECASE)
 
 
 class OpenAICompatibleProvider(LLMProvider):
@@ -53,6 +57,17 @@ class OpenAICompatibleProvider(LLMProvider):
             transport=transport,
         )
 
+    def _build_response_format(self, schema: dict[str, Any], name: str) -> dict[str, Any] | None:
+        """Construct the response_format parameter for structured output.
+
+        Subclasses may override this to specify provider-specific formats
+        (e.g., {"type": "json_object"} for DeepSeek).
+        """
+        return {
+            "type": "json_schema",
+            "json_schema": {"name": name, "strict": True, "schema": schema},
+        }
+
     def complete_json(
         self,
         system: str,
@@ -66,16 +81,23 @@ class OpenAICompatibleProvider(LLMProvider):
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {"name": name, "strict": True, "schema": schema},
-            },
         }
+        fmt = self._build_response_format(schema, name)
+        if fmt is not None:
+            body["response_format"] = fmt
 
         response = self._post(body)
-        if response.status_code == 400 and "response_format" in response.text:
-            # Some models reject structured outputs; the prompt still asks for JSON.
-            logger.info("%s: fallback from response_format", self.name)
+        err_detail = self._extract_error_detail(response).lower() if response.status_code >= 400 else ""
+        has_fmt_err = "response_format" in response.text.lower() or "response_format" in err_detail
+        if response.status_code == 400 and has_fmt_err:
+            sanitized_body = self._sanitize_log_output(response.text)
+            logger.warning(
+                "%s (model=%s): HTTP 400 with response_format=%s: %s; falling back without response_format",
+                self.name,
+                self.model,
+                fmt,
+                sanitized_body,
+            )
             body.pop("response_format", None)
             response = self._post(body)
 
@@ -88,9 +110,27 @@ class OpenAICompatibleProvider(LLMProvider):
         try:
             content = payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
-            raise LLMError(f"Unexpected response format from {self.name}: {payload}") from exc
+            sanitized = self._sanitize_log_output(payload)
+            raise LLMError(f"Unexpected response format from {self.name}: {sanitized}") from exc
 
-        return parse_json(content)
+        try:
+            return parse_json(content)
+        except LLMStructuredOutputError as exc:
+            logger.warning(
+                "%s (model=%s): failed to parse structured output: %s (content snippet: %s)",
+                self.name,
+                self.model,
+                exc,
+                self._sanitize_log_output(str(content)[:200]),
+            )
+            raise
+
+    def _sanitize_log_output(self, value: Any, max_len: int = 500) -> str:
+        text = str(value or "")
+        masked = _SECRET_PATTERN.sub("[REDACTED_SECRET]", text)
+        if len(masked) > max_len:
+            return masked[:max_len] + "... [truncated]"
+        return masked
 
     def _post(self, body: dict[str, Any]) -> httpx.Response:
         delay = 2.0

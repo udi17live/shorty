@@ -175,6 +175,101 @@ def test_deepseek_successful_request():
     assert captured["url"] == "https://api.deepseek.com/chat/completions"
     assert captured["headers"]["authorization"] == "Bearer sk-deepseek-secret"
     assert captured["body"]["model"] == "deepseek-chat"
+    # DeepSeek must use {"type": "json_object"} rather than json_schema on the first attempt
+    assert captured["body"]["response_format"] == {"type": "json_object"}
+
+
+def test_deepseek_fallback_behavior():
+    calls = []
+
+    def handler(request: httpx.Request):
+        body = json.loads(request.content)
+        calls.append(body.get("response_format"))
+        if "response_format" in body:
+            err = {"message": "Invalid response_format parameter", "type": "invalid_request_error"}
+            return httpx.Response(400, json={"error": err})
+        return json_reply('{"clips": [{"rank": 1, "title": "Fallback clip"}]}')
+
+    provider = DeepSeekProvider(
+        api_key="sk-test",
+        model="deepseek-chat",
+        transport=httpx.MockTransport(handler),
+    )
+    result = provider.complete_json("system instructions", "user transcript", {}, "test_schema")
+    assert result == {"clips": [{"rank": 1, "title": "Fallback clip"}]}
+    assert len(calls) == 2
+    assert calls[0] == {"type": "json_object"}
+    assert calls[1] is None
+
+
+def test_deepseek_400_non_format_error():
+    def handler(_):
+        return httpx.Response(
+            400,
+            json={"error": {"message": "Invalid prompt length", "type": "invalid_request_error"}},
+        )
+
+    provider = DeepSeekProvider(
+        api_key="sk-test",
+        model="deepseek-chat",
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(LLMError, match="Invalid prompt length"):
+        provider.complete_json("s", "u", {}, "n")
+
+
+def test_deepseek_malformed_or_multiple_json_causes_controlled_retry():
+    attempt_prompts = []
+
+    def handler(request: httpx.Request):
+        body = json.loads(request.content)
+        user_prompt = body["messages"][-1]["content"]
+        attempt_prompts.append(user_prompt)
+
+        if len(attempt_prompts) == 1:
+            # First attempt returns multiple JSON objects (like the error in production)
+            return json_reply('{"clips": []}\n{"clips": []}')
+        # Second attempt returns valid JSON
+        return json_reply('{"clips": [{"rank": 1, "start_seconds": 0.0, "end_seconds": 25.0}]}')
+
+    provider = DeepSeekProvider(
+        api_key="sk-test",
+        model="deepseek-chat",
+        transport=httpx.MockTransport(handler),
+    )
+
+    transcript = {
+        "language": "en",
+        "sentences": [{"start": 0.0, "end": 30.0, "text": "hello world"}],
+    }
+    options = {"clip_count": 1, "min_seconds": 15.0, "max_seconds": 30.0}
+
+    result = select_clips(provider, {"title": "Test"}, transcript, options)
+    assert len(result["clips"]) == 1
+    assert result["clips"][0]["start_seconds"] == 0.0
+    assert result["clips"][0]["end_seconds"] == 30.0  # snapped to sentence boundary
+    assert len(attempt_prompts) == 2
+    # Verify the corrective prompt explicitly instructed the model about formatting
+    assert "returned invalid JSON" in attempt_prompts[1]
+    assert "CRITICAL FORMATTING INSTRUCTIONS" in attempt_prompts[1]
+
+
+def test_openrouter_sends_json_schema():
+    captured = {}
+
+    def handler(request: httpx.Request):
+        captured["body"] = json.loads(request.content)
+        return json_reply('{"clips": []}')
+
+    provider = OpenRouterProvider(
+        api_key="sk-or-test",
+        model="test-model",
+        transport=httpx.MockTransport(handler),
+    )
+    result = provider.complete_json("sys", "user", {"type": "object"}, "clip_schema")
+    assert result == {"clips": []}
+    assert captured["body"]["response_format"]["type"] == "json_schema"
+    assert captured["body"]["response_format"]["json_schema"]["name"] == "clip_schema"
 
 
 def test_deepseek_authentication_error():

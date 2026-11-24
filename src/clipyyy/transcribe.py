@@ -21,18 +21,21 @@ def transcribe(video_path: Path, work_dir: Path, model_size: str, language: str 
     audio = load_wav(audio_path)
     lang = None if language in ("", "auto") else language
     try:
-        words, detected = _run_whisper(audio, model_size, lang, "auto", "default")
-    except RuntimeError as exc:
-        # A GPU without the CUDA libraries faster-whisper expects: fall back to the CPU.
-        if not any(k in str(exc).lower() for k in ("cuda", "cublas", "cudnn")):
-            raise
-        logger.warning("GPU transcription unavailable (%s); using the CPU", exc)
-        words, detected = _run_whisper(audio, model_size, lang, "cpu", "int8")
-    audio_path.unlink(missing_ok=True)
+        try:
+            words, detected = _run_whisper(audio, model_size, lang, "auto", "auto")
+        except RuntimeError as exc:
+            # A GPU without the CUDA libraries faster-whisper expects: fall back to the CPU.
+            if not any(k in str(exc).lower() for k in ("cuda", "cublas", "cudnn")):
+                raise
+            logger.warning("GPU transcription unavailable (%s); using the CPU", exc)
+            words, detected = _run_whisper(audio, model_size, lang, "cpu", "int8")
+    finally:
+        audio_path.unlink(missing_ok=True)
     return {"language": detected, "model": model_size, "words": words, "sentences": group_sentences(words)}
 
 
 def _run_whisper(audio, model_size: str, language: str | None, device: str, compute_type: str):
+    import gc
     import warnings
 
     from faster_whisper import WhisperModel
@@ -41,7 +44,11 @@ def _run_whisper(audio, model_size: str, language: str | None, device: str, comp
     warnings.filterwarnings("ignore", message=".*unauthenticated requests to the HF Hub.*")
 
     model = WhisperModel(
-        model_size, device=device, compute_type=compute_type, download_root=str(home() / "models" / "whisper")
+        model_size,
+        device=device,
+        compute_type=compute_type,
+        cpu_threads=4,
+        download_root=str(home() / "models" / "whisper"),
     )
     segments, info = model.transcribe(
         audio, language=language, word_timestamps=True, vad_filter=True, condition_on_previous_text=False
@@ -52,7 +59,10 @@ def _run_whisper(audio, model_size: str, language: str | None, device: str, comp
         for w in segment.words or []
         if w.word.strip()
     ]
-    return words, info.language
+    detected_language = info.language
+    del model
+    gc.collect()
+    return words, detected_language
 
 
 def load_wav(path: Path):
@@ -63,7 +73,10 @@ def load_wav(path: Path):
 
     with wave.open(str(path), "rb") as wav:
         frames = wav.readframes(wav.getnframes())
-    return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+    audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32)
+    del frames
+    audio /= 32768.0
+    return audio
 
 
 def group_sentences(words: list[dict], max_words: int = 60) -> list[dict]:

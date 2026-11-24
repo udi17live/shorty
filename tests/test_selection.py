@@ -97,3 +97,163 @@ def test_select_clips_retries_until_valid(transcript):
 def test_select_clips_without_speech_fails():
     with pytest.raises(ValueError, match="No speech"):
         select_clips(FakeLLM([]), {}, {"sentences": []}, OPTIONS)
+
+
+def test_clip_selection_constraints_and_validation():
+    # 120s transcript with 10s sentences
+    sentences = [{"start": float(i * 10), "end": float((i + 1) * 10), "text": f"s{i}"} for i in range(12)]
+    tr = {"language": "en", "sentences": sentences}
+    opts = {"clip_count": 5, "min_seconds": 20.0, "max_seconds": 60.0}
+
+    # 1. valid 20s clip -> accepted
+    res_20 = validate_clips([raw(0.0, 20.0, 1)], tr, opts)
+    assert len(res_20) == 1
+    assert res_20[0]["start_seconds"] == 0.0
+    assert res_20[0]["end_seconds"] == 20.0
+
+    # 2. 19s clip -> rejected
+    rejections_19 = []
+    res_19 = validate_clips([raw(0.0, 19.0, 1)], tr, opts, rejections=rejections_19)
+    assert len(res_19) == 0
+    assert any("< minimum" in r for r in rejections_19)
+
+    # 3. 60s clip -> accepted
+    res_60 = validate_clips([raw(10.0, 70.0, 1)], tr, opts)
+    assert len(res_60) == 1
+    assert res_60[0]["start_seconds"] == 10.0
+    assert res_60[0]["end_seconds"] == 70.0
+
+    # 4. 61s clip -> rejected
+    rejections_61 = []
+    res_61 = validate_clips([raw(10.0, 71.0, 1)], tr, opts, rejections=rejections_61)
+    assert len(res_61) == 0
+    assert any("> maximum" in r for r in rejections_61)
+
+    # 5. negative start -> rejected
+    rejections_neg = []
+    res_neg = validate_clips([raw(-5.0, 20.0, 1)], tr, opts, rejections=rejections_neg)
+    assert len(res_neg) == 0
+    assert any("negative" in r for r in rejections_neg)
+
+    # 6. end <= start -> rejected
+    rejections_le = []
+    res_le = validate_clips([raw(30.0, 20.0, 1)], tr, opts, rejections=rejections_le)
+    assert len(res_le) == 0
+    assert any("<= start" in r for r in rejections_le)
+
+    # 7. timestamp outside transcript -> rejected
+    rejections_out = []
+    res_out = validate_clips([raw(0.0, 150.0, 1)], tr, opts, rejections=rejections_out)
+    assert len(res_out) == 0
+    assert any("outside transcript" in r for r in rejections_out)
+
+
+def test_validation_supports_start_end_keys_and_string_timestamps():
+    sentences = [{"start": float(i * 10), "end": float((i + 1) * 10), "text": f"s{i}"} for i in range(10)]
+    tr = {"language": "en", "sentences": sentences}
+    opts = {"clip_count": 3, "min_seconds": 20.0, "max_seconds": 60.0}
+
+    # "start" / "end" and "score" / "reasoning"
+    raw_deepseek = {
+        "rank": 1,
+        "start": 10.0,
+        "end": 40.0,
+        "score": 8.5,
+        "reasoning": "Great moment",
+        "title": "Clip A",
+        "post_title": "Short A",
+        "caption": "Check this",
+        "hashtags": ["#viral"],
+        "broll_queries": ["nature"],
+    }
+    res = validate_clips([raw_deepseek], tr, opts)
+    assert len(res) == 1
+    assert res[0]["start_seconds"] == 10.0
+    assert res[0]["end_seconds"] == 40.0
+    assert res[0]["score"] == 8.5
+    assert res[0]["rationale"] == "Great moment"
+
+    # String format timestamps: "00:10" to "00:40"
+    raw_str = {
+        "rank": 1,
+        "start_time": "00:10",
+        "end_time": "00:40",
+        "title": "Clip B",
+    }
+    res_str = validate_clips([raw_str], tr, opts)
+    assert len(res_str) == 1
+    assert res_str[0]["start_seconds"] == 10.0
+    assert res_str[0]["end_seconds"] == 40.0
+
+
+def test_select_clips_retries_with_rejection_reasons_in_prompt(transcript):
+    recorded_users = []
+
+    class MockLLM:
+        model = "mock"
+
+        def complete_json(self, system, user, schema, name):
+            recorded_users.append(user)
+            if len(recorded_users) == 1:
+                # Return clip outside duration
+                return {"clips": [{"rank": 1, "start_seconds": 0.0, "end_seconds": 10.0}]}
+            # Second attempt returns valid clip
+            return {"clips": [{"rank": 1, "start_seconds": 0.0, "end_seconds": 20.0}]}
+
+    result = select_clips(MockLLM(), {"title": "Test"}, transcript, OPTIONS)
+    assert len(result["clips"]) == 1
+    assert len(recorded_users) == 2
+    assert "attempt #1" in recorded_users[1].lower()
+    assert "< minimum" in recorded_users[1]
+    assert "CORRECTION REQUIRED" in recorded_users[1]
+
+
+def test_validation_model_duration_discrepancy_uses_end_minus_start():
+    sentences = [{"start": float(i * 10), "end": float((i + 1) * 10), "text": f"s{i}"} for i in range(10)]
+    tr = {"language": "en", "sentences": sentences}
+    opts = {"clip_count": 3, "min_seconds": 20.0, "max_seconds": 60.0}
+
+    # Model returned duration_seconds=99.0, but end - start is 30.0 (which is within limits)
+    raw_clip = {
+        "rank": 1,
+        "start": 10.0,
+        "end": 40.0,
+        "duration_seconds": 99.0,
+        "title": "Clip With Bad Model Duration",
+    }
+    res = validate_clips([raw_clip], tr, opts)
+    assert len(res) == 1
+    assert res[0]["start_seconds"] == 10.0
+    assert res[0]["end_seconds"] == 40.0
+
+
+def test_validation_rejects_missing_timestamps():
+    sentences = [{"start": 0.0, "end": 60.0, "text": "hello"}]
+    tr = {"language": "en", "sentences": sentences}
+    opts = {"clip_count": 3, "min_seconds": 20.0, "max_seconds": 60.0}
+
+    rejections = []
+    res = validate_clips([{"rank": 1, "start": None, "end": 30.0}], tr, opts, rejections=rejections)
+    assert len(res) == 0
+    assert any("missing or unparseable" in r for r in rejections)
+
+
+def test_select_clips_retries_on_invalid_json_with_specific_prompt(transcript):
+    recorded_users = []
+
+    class MockLLM:
+        model = "mock"
+
+        def complete_json(self, system, user, schema, name):
+            from clipyyy.providers.base import LLMStructuredOutputError
+            recorded_users.append(user)
+            if len(recorded_users) == 1:
+                raise LLMStructuredOutputError("Model returned multiple JSON values")
+            return {"clips": [{"rank": 1, "start_seconds": 0.0, "end_seconds": 20.0}]}
+
+    result = select_clips(MockLLM(), {"title": "Test"}, transcript, OPTIONS)
+    assert len(result["clips"]) == 1
+    assert len(recorded_users) == 2
+    assert "returned invalid JSON" in recorded_users[1]
+    assert "CRITICAL FORMATTING INSTRUCTIONS" in recorded_users[1]
+    assert "EXACTLY ONE JSON object" in recorded_users[1]
