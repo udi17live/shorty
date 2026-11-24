@@ -63,7 +63,8 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--broll", action="store_true", help="cut in Pexels stock footage")
     c.add_argument("--language", default="auto", help="spoken language code, e.g. en (auto)")
     c.add_argument("--instructions", default="", help="extra guidance for picking clips")
-    c.add_argument("--model", help="LLM model id, e.g. google/gemini-3.8-flash")
+    c.add_argument("--model", help="LLM model id, e.g. google/gemini-3.8-flash, deepseek-chat")
+    c.add_argument("--provider", choices=["deepseek", "openrouter", "ollama"], help="LLM provider")
     c.add_argument("-o", "--out", type=Path, help="copy finished clips into this folder")
     c.add_argument(
         "--queue", action="store_true", help="only queue the run for a running `clipyyy serve` worker"
@@ -110,6 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     m = sub.add_parser("models", help="list models that support structured output")
     m.add_argument("search", nargs="?", default="")
+    m.add_argument("-p", "--provider", choices=["deepseek", "openrouter", "ollama"], help="LLM provider")
     m.add_argument("--json", action="store_true")
     m.set_defaults(func=cmd_models)
 
@@ -168,6 +170,7 @@ def cmd_clip(args: argparse.Namespace) -> int:
         language=args.language,
         instructions=args.instructions,
         model=args.model,
+        provider=args.provider,
     ).model_dump()
 
     if args.queue:
@@ -341,14 +344,19 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 def cmd_models(args: argparse.Namespace) -> int:
     from clipyyy.llm import list_models
 
-    models = [m for m in list_models() if args.search.lower() in m["id"].lower()]
+    models = [
+        m
+        for m in list_models(provider=getattr(args, "provider", None))
+        if args.search.lower() in m["id"].lower()
+    ]
     if args.json:
         print(json.dumps(models, indent=2))
     else:
         for m in models:
-            price = m["prompt_price_per_million"]
+            price = m.get("prompt_price_per_million")
+            ctx = m.get("context_length") or "?"
             print(
-                f"{m['id']:<50} {m['context_length'] or '?':>8} ctx  "
+                f"{m['id']:<50} {ctx:>8} ctx  "
                 f"${price if price is not None else '?'}/M in"
             )
     return 0

@@ -26,7 +26,7 @@ It has a web app for people and a JSON command line for scripts and AI coding ag
 ## Features
 
 - **AI clip finder.** An LLM reads the whole transcript and ranks the strongest standalone moments by hook, value and clarity. Clips are snapped to sentence boundaries so nothing starts or ends mid-thought.
-- **Bring your own model.** Works with any model on [OpenRouter](https://openrouter.ai): Gemini, Claude, GPT, DeepSeek, Qwen, Llama and more. A one-hour video costs about one cent with a fast model.
+- **Pluggable LLM provider architecture.** Support for **DeepSeek Direct API**, **OpenRouter**, and **Ollama (local models)** out of the box, with an extensible driver system for future providers (OpenAI, Anthropic, Gemini).
 - **Local transcription.** [faster-whisper](https://github.com/SYSTRAN/faster-whisper) with word-level timestamps, on CPU or GPU, in 90+ languages.
 - **Automatic reframing.** Face tracking (MediaPipe) keeps the speaker centred when converting horizontal video to 9:16, 4:5 or 1:1.
 - **Animated captions.** Word-by-word highlighted subtitles in three styles, rendered with ffmpeg.
@@ -146,14 +146,117 @@ Every step saves its result, so a failed run resumes from the step that failed.
 
 Hosted tools are more polished and need no setup. clipyyy is for people who want control, privacy, no limits, or to automate clipping with scripts and agents.
 
+## LLM Providers
+
+clipyyy has a clean provider/driver architecture where the clipping pipeline is completely decoupled from the AI provider. You can switch providers at any time from the Web UI, the CLI, or environment variables without changing any application code.
+
+### 1. DeepSeek (Direct API)
+
+Use DeepSeek's official OpenAI-compatible endpoint directly (not routed through OpenRouter) with `deepseek-chat` (DeepSeek-V3) or `deepseek-reasoner` (DeepSeek-R1):
+
+```bash
+# Via CLI
+clipyyy config set llm_provider deepseek
+clipyyy config set deepseek_api_key sk-...
+clipyyy config set deepseek_model deepseek-chat
+# Optional custom base URL (default: https://api.deepseek.com)
+clipyyy config set deepseek_base_url https://api.deepseek.com
+```
+
+Or environment variables:
+
+```env
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
+### 2. OpenRouter
+
+Access 200+ hosted models (Gemini Flash, Claude, GPT-4o, Llama) with a single OpenRouter key:
+
+```bash
+# Via CLI
+clipyyy config set llm_provider openrouter
+clipyyy config set openrouter_api_key sk-or-...
+clipyyy config set llm_model google/gemini-3.8-flash
+```
+
+Or environment variables:
+
+```env
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-...
+CLIPYYY_LLM_MODEL=google/gemini-3.8-flash
+```
+
+### 3. Ollama (Local Models)
+
+Run open-weights models (Qwen 2.5, Llama 3.2, DeepSeek-R1 distills) 100% locally with zero cloud API keys:
+
+```bash
+# Start your local Ollama server
+ollama pull llama3.2
+ollama serve
+
+# Configure clipyyy
+clipyyy config set llm_provider ollama
+clipyyy config set ollama_model llama3.2
+# Optional custom base URL (default: http://localhost:11434)
+clipyyy config set ollama_base_url http://localhost:11434
+```
+
+Or environment variables:
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2
+```
+
+### Switching Providers
+
+You can switch the active provider at any time:
+- **In the Web UI**: Go to **Settings** → **AI** → choose **AI Provider** from the dropdown, enter the required fields, click **Test connection**, and click **Save changes**.
+- **In the CLI**: Run `clipyyy config set llm_provider <deepseek|openrouter|ollama>`.
+- **Per command**: Override the provider on the fly with `clipyyy clip <url> --provider deepseek --model deepseek-chat --json`.
+- **Headless / Docker**: Set the `LLM_PROVIDER` environment variable.
+
+### Test Connection
+
+In the web UI (**Settings** → **AI**), click **Test connection** to verify your API key, base URL, and model before clipping. It makes a minimal ping request and returns immediate feedback (`✓ DeepSeek connection successful` or `✗ Connection failed: Invalid API key`) without leaking your keys.
+
+### Using with Docker
+
+Docker is pre-configured with support for all three providers:
+
+```bash
+# Run with DeepSeek
+DEEPSEEK_API_KEY=sk-... LLM_PROVIDER=deepseek docker compose up -d
+
+# Run with local Ollama
+LLM_PROVIDER=ollama OLLAMA_MODEL=llama3.2 docker compose up -d
+```
+
+> **Note for Ollama in Docker**: `docker-compose.yml` configures `host.docker.internal:host-gateway`. When running inside Docker, set `OLLAMA_BASE_URL=http://host.docker.internal:11434` so the container can reach your host's Ollama instance.
+
 ## Settings
 
 Add keys in the web app under **Settings**, with `clipyyy config set <key> <value>`, or with environment variables. Values saved in the app take priority.
 
 | Setting | Environment variable | Used for |
 |---|---|---|
-| `openrouter_api_key` | `OPENROUTER_API_KEY` | Finding clips (required) |
-| `llm_model` | `CLIPYYY_LLM_MODEL` | Default model, `google/gemini-3.8-flash` |
+| `llm_provider` | `LLM_PROVIDER` / `CLIPYYY_LLM_PROVIDER` | Active provider: `deepseek`, `openrouter`, or `ollama` (default: `openrouter`) |
+| `deepseek_api_key` | `DEEPSEEK_API_KEY` | DeepSeek direct API key |
+| `deepseek_base_url` | `DEEPSEEK_BASE_URL` | DeepSeek API base URL (default: `https://api.deepseek.com`) |
+| `deepseek_model` | `DEEPSEEK_MODEL` | DeepSeek model (default: `deepseek-chat`) |
+| `openrouter_api_key` | `OPENROUTER_API_KEY` | OpenRouter API key |
+| `openrouter_base_url` | `OPENROUTER_BASE_URL` | OpenRouter base URL (default: `https://openrouter.ai/api/v1`) |
+| `openrouter_model` | `OPENROUTER_MODEL` | OpenRouter model (default: fallback to `llm_model`) |
+| `ollama_base_url` | `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`) |
+| `ollama_model` | `OLLAMA_MODEL` | Ollama model name (default: `llama3.2`) |
+| `llm_model` | `LLM_MODEL` / `CLIPYYY_LLM_MODEL` | Global default model (default: `google/gemini-3.8-flash`) |
 | `whisper_model` | `CLIPYYY_WHISPER_MODEL` | `tiny`, `base`, `small` (default), `medium`, `large-v3`, `turbo` |
 | `ytdlp_cookies_from_browser` | `CLIPYYY_COOKIES_FROM_BROWSER` | Using your browser's YouTube login if YouTube blocks downloads |
 | `pexels_api_key` | `PEXELS_API_KEY` | B-roll |

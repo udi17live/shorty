@@ -115,6 +115,25 @@ export interface Model {
   completion_price_per_million: number | null
 }
 
+export interface ProviderInfo {
+  id: string
+  name: string
+}
+
+export interface TestConnectionRequest {
+  provider?: string
+  api_key?: string
+  base_url?: string
+  model?: string
+}
+
+export interface TestConnectionResult {
+  ok: boolean
+  provider: string
+  model: string
+  message: string
+}
+
 export interface Channel {
   id: string
   name: string
@@ -148,7 +167,14 @@ export const api = {
   settings: () => request<Setting[]>('/api/settings'),
   saveSettings: (values: Record<string, string | null>) =>
     request<Setting[]>('/api/settings', { method: 'PUT', body: JSON.stringify({ values }) }),
-  models: () => request<Model[]>('/api/models'),
+  models: (provider?: string) =>
+    request<Model[]>(provider ? `/api/models?provider=${encodeURIComponent(provider)}` : '/api/models'),
+  providers: () => request<ProviderInfo[]>('/api/providers'),
+  testConnection: (body?: TestConnectionRequest) =>
+    request<TestConnectionResult>('/api/settings/test-connection', {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
   runs: () => request<Run[]>('/api/runs'),
   run: (id: string) => request<RunDetail>(`/api/runs/${id}`),
   createRuns: (sources: string[], options: ClipOptions) =>

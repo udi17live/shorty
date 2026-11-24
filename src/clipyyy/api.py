@@ -40,6 +40,13 @@ class UpdateSettings(BaseModel):
     values: dict[str, str | None]
 
 
+class TestConnectionRequest(BaseModel):
+    provider: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+
+
 class PublishRequest(BaseModel):
     channel_ids: list[str] = Field(..., min_length=1)
     mode: PublishMode = "queue"
@@ -102,12 +109,45 @@ def create_app(start_worker: bool = True) -> FastAPI:
             db.set_setting(key, value.strip() if value else None)
         return get_settings()
 
+    @app.get("/api/providers")
+    def get_providers() -> list[dict]:
+        from clipyyy.providers.factory import LLMProviderFactory
+
+        names = {
+            "deepseek": "DeepSeek",
+            "openrouter": "OpenRouter",
+            "ollama": "Ollama",
+        }
+        return [
+            {"id": p, "name": names.get(p, p.capitalize())}
+            for p in LLMProviderFactory.registered_providers()
+        ]
+
+    @app.post("/api/settings/test-connection")
+    @app.post("/api/test-connection")
+    def test_connection_endpoint(body: TestConnectionRequest | None = None) -> dict:
+        from clipyyy.llm import test_connection
+
+        req = body or TestConnectionRequest()
+        key = req.api_key
+        if key and "••••" in key:
+            key = None
+        try:
+            return test_connection(
+                provider=req.provider,
+                model=req.model,
+                api_key=key,
+                base_url=req.base_url,
+            )
+        except Exception as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     @app.get("/api/models")
-    def models() -> list[dict]:
+    def models(provider: str | None = None) -> list[dict]:
         from clipyyy.llm import list_models
 
         try:
-            return list_models()
+            return list_models(provider=provider)
         except Exception as exc:
             raise HTTPException(502, f"Could not load models: {exc}") from exc
 

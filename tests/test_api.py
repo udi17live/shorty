@@ -13,12 +13,23 @@ def client():
 
 def test_settings_are_masked_and_updatable(client):
     r = client.put(
-        "/api/settings", json={"values": {"openrouter_api_key": "sk-or-1234567890abcd", "llm_model": "a/b"}}
+        "/api/settings",
+        json={
+            "values": {
+                "openrouter_api_key": "sk-or-1234567890abcd",
+                "deepseek_api_key": "sk-ds-1234567890wxyz",
+                "llm_provider": "deepseek",
+                "llm_model": "a/b",
+            }
+        },
     )
     assert r.status_code == 200
     rows = {s["key"]: s for s in client.get("/api/settings").json()}
     assert rows["openrouter_api_key"]["value"] == "sk-••••abcd"
     assert rows["openrouter_api_key"]["source"] == "app"
+    assert rows["deepseek_api_key"]["value"] == "sk-••••wxyz"
+    assert rows["deepseek_api_key"]["source"] == "app"
+    assert rows["llm_provider"]["value"] == "deepseek"
     assert rows["llm_model"]["value"] == "a/b"
     # Sending the masked value back must not overwrite the real key
     client.put("/api/settings", json={"values": {"openrouter_api_key": "sk-••••abcd"}})
@@ -26,6 +37,20 @@ def test_settings_are_masked_and_updatable(client):
     client.put("/api/settings", json={"values": {"openrouter_api_key": None}})
     assert db.get_setting("openrouter_api_key") is None
     assert client.put("/api/settings", json={"values": {"nope": "x"}}).status_code == 400
+
+
+def test_api_providers_endpoint(client):
+    r = client.get("/api/providers")
+    assert r.status_code == 200
+    ids = [p["id"] for p in r.json()]
+    assert "deepseek" in ids and "openrouter" in ids and "ollama" in ids
+
+
+def test_api_test_connection_endpoint(client):
+    # Fails when key is missing
+    r = client.post("/api/settings/test-connection", json={"provider": "deepseek", "api_key": ""})
+    assert r.status_code == 400
+    assert "No API key" in r.json()["detail"]
 
 
 def test_run_lifecycle(client):

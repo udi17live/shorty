@@ -36,6 +36,7 @@ class ClipOptions(BaseModel):
     language: str = Field("auto", description="Spoken language code, or auto")
     instructions: str = Field("", max_length=4000, description="Extra guidance for the AI")
     model: str | None = Field(None, description="Override the default LLM model")
+    provider: str | None = Field(None, description="Override the default LLM provider")
 
     @model_validator(mode="after")
     def _check_range(self) -> ClipOptions:
@@ -89,7 +90,10 @@ def stage_select(ctx: Context) -> dict:
     if defaults:
         options["instructions"] = f"{defaults}\n{options['instructions']}".strip()
     return select_clips(
-        get_llm(options.get("model")), ctx.state["download"], ctx.state["transcribe"], options
+        get_llm(model=options.get("model"), provider=options.get("provider")),
+        ctx.state["download"],
+        ctx.state["transcribe"],
+        options,
     )
 
 

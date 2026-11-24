@@ -72,6 +72,7 @@ export function NewRunPage() {
   const blockers = (health.data?.checks ?? []).filter((c) => c.required && !c.ok && c.name !== 'llm')
   const needsKey = health.data && !checks.llm?.ok
   const defaultModel = settings.data?.find((s) => s.key === 'llm_model')?.value
+  const activeProvider = (settings.data?.find((s) => s.key === 'llm_provider')?.value || 'openrouter').toLowerCase()
   const set = <K extends keyof ClipOptions>(key: K, value: ClipOptions[K]) => setOptions((o) => ({ ...o, [key]: value }))
 
   const urls = text
@@ -117,7 +118,7 @@ export function NewRunPage() {
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex flex-col gap-6">
-          {needsKey && <ConnectModel onSaved={() => queryClient.invalidateQueries()} />}
+          {needsKey && <ConnectModel provider={activeProvider} onSaved={() => queryClient.invalidateQueries()} />}
           {blockers.map((c) => (
             <Panel key={c.name} className="border-bad/40 bg-bad-soft p-4 text-sm text-bad">
               {c.label}: {c.detail}
@@ -329,7 +330,7 @@ export function NewRunPage() {
               <Textarea rows={2} value={options.instructions} onChange={(e) => set('instructions', e.target.value)} />
             </Field>
             <Field label="Model" hint="Empty uses your default from Settings">
-              <ModelInput placeholder={defaultModel} value={options.model ?? ''} onChange={(v) => set('model', v.trim() || null)} />
+              <ModelInput provider={activeProvider} placeholder={defaultModel} value={options.model ?? ''} onChange={(v) => set('model', v.trim() || null)} />
             </Field>
           </Section>
         </Panel>
@@ -347,10 +348,14 @@ function Section({ title, children, last }: { title: string; children: ReactNode
   )
 }
 
-function ConnectModel({ onSaved }: { onSaved: () => void }) {
+function ConnectModel({ onSaved, provider = 'openrouter' }: { onSaved: () => void; provider?: string }) {
   const [key, setKey] = useState('')
+  const keySetting = provider === 'deepseek' ? 'deepseek_api_key' : 'openrouter_api_key'
+  const providerLabel = provider === 'deepseek' ? 'DeepSeek' : 'OpenRouter'
+  const keyUrl = provider === 'deepseek' ? 'https://platform.deepseek.com/api_keys' : 'https://openrouter.ai/keys'
+
   const save = useMutation({
-    mutationFn: () => api.saveSettings({ openrouter_api_key: key.trim() }),
+    mutationFn: () => api.saveSettings({ [keySetting]: key.trim() }),
     onSuccess: () => {
       toast.success('Key saved on this machine')
       onSaved()
@@ -364,9 +369,13 @@ function ConnectModel({ onSaved }: { onSaved: () => void }) {
         <div>
           <p className="font-semibold">Connect a model to start</p>
           <p className="text-[13px] leading-relaxed text-muted">
-            clipyyy picks clips with any model on{' '}
-            <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-ink underline underline-offset-2">
-              OpenRouter
+            clipyyy picks clips with {providerLabel}. Get a key on{' '}
+            <a href={keyUrl} target="_blank" rel="noreferrer" className="text-ink underline underline-offset-2">
+              {providerLabel}
+            </a>
+            , or configure another provider in{' '}
+            <a href="/settings#ai" className="text-ink underline underline-offset-2">
+              Settings
             </a>
             . Your key is stored only on this machine.
           </p>
@@ -379,7 +388,13 @@ function ConnectModel({ onSaved }: { onSaved: () => void }) {
           if (key.trim()) save.mutate()
         }}
       >
-        <Input type="password" placeholder="sk-or-…" value={key} onChange={(e) => setKey(e.target.value)} aria-label="OpenRouter API key" />
+        <Input
+          type="password"
+          placeholder={provider === 'deepseek' ? 'sk-…' : 'sk-or-…'}
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          aria-label={`${providerLabel} API key`}
+        />
         <Button type="submit" loading={save.isPending} disabled={!key.trim()}>
           Save
         </Button>

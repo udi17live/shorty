@@ -7,8 +7,22 @@ services:
     volumes:
       - ./data:/data
     environment:
-      # Optional: keys can also be added in the web UI under Settings.
+      # LLM Provider settings (can also be configured in the web UI under Settings)
+      - LLM_PROVIDER=${LLM_PROVIDER:-}
+      - CLIPYYY_LLM_PROVIDER=${CLIPYYY_LLM_PROVIDER:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - CLIPYYY_LLM_MODEL=${CLIPYYY_LLM_MODEL:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      # Integrations
       - PEXELS_API_KEY=${PEXELS_API_KEY:-}
       - BUFFER_API_KEY=${BUFFER_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped

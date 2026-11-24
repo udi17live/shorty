@@ -2,9 +2,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { api, type Setting } from '../api'
+import { api, type Setting, type TestConnectionRequest } from '../api'
 import { ModelInput } from '../components/ModelInput'
 import { Button, Eyebrow, Field, Input, Panel, Select, Textarea, cn } from '../components/ui'
+
+const AI_PROVIDERS = [
+  ['deepseek', 'DeepSeek (Direct API)'],
+  ['openrouter', 'OpenRouter'],
+  ['ollama', 'Ollama (Local models)'],
+] as const
 
 const WHISPER_MODELS = [
   ['tiny', 'tiny · fastest'],
@@ -34,6 +40,22 @@ export function SettingsPage() {
 
   const byKey: Record<string, Setting> = Object.fromEntries((settings.data ?? []).map((s) => [s.key, s]))
   const orgs = useQuery({ queryKey: ['orgs'], queryFn: api.organizations, enabled: !!byKey.buffer_api_key?.is_set })
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+  const testConn = useMutation({
+    mutationFn: (body?: TestConnectionRequest) => api.testConnection(body),
+    onSuccess: (res) => {
+      setTestResult({
+        ok: true,
+        message: `${res.message || 'Connection successful'} · Model: ${res.model}`,
+      })
+      toast.success(`${res.provider || 'LLM'} connection successful`)
+    },
+    onError: (e) => {
+      setTestResult({ ok: false, message: e.message })
+      toast.error(`Connection failed: ${e.message}`)
+    },
+  })
 
   const changes = () => {
     const values: Record<string, string | null> = {}
@@ -59,6 +81,28 @@ export function SettingsPage() {
   })
 
   if (settings.isLoading) return <p className="text-muted">Loading…</p>
+
+  const currentProvider = (draft.llm_provider || byKey.llm_provider?.value || 'openrouter').toLowerCase().trim()
+
+  const onTestConnection = () => {
+    setTestResult(null)
+    const req: TestConnectionRequest = {
+      provider: currentProvider,
+    }
+    if (currentProvider === 'deepseek') {
+      if (draft.deepseek_api_key) req.api_key = draft.deepseek_api_key
+      if (draft.deepseek_base_url) req.base_url = draft.deepseek_base_url
+      if (draft.deepseek_model) req.model = draft.deepseek_model
+    } else if (currentProvider === 'openrouter') {
+      if (draft.openrouter_api_key) req.api_key = draft.openrouter_api_key
+      if (draft.openrouter_base_url) req.base_url = draft.openrouter_base_url
+      if (draft.openrouter_model || draft.llm_model) req.model = draft.openrouter_model || draft.llm_model
+    } else if (currentProvider === 'ollama') {
+      if (draft.ollama_base_url) req.base_url = draft.ollama_base_url
+      if (draft.ollama_model) req.model = draft.ollama_model
+    }
+    testConn.mutate(req)
+  }
 
   const update = (key: string) => (value: string) => setDraft((d) => ({ ...d, [key]: value }))
   const text = (key: string, placeholder?: string) => (
@@ -124,13 +168,132 @@ export function SettingsPage() {
         </aside>
 
         <div className="flex flex-col gap-6">
-          <Section id="ai" title="AI" description="A language model reads the transcript and picks the clips. OpenRouter gives you every major model with one key.">
-            <Field label="OpenRouter API key" hint={<Ext href="https://openrouter.ai/keys">Create a key</Ext>}>
-              {secret('openrouter_api_key', 'sk-or-…')}
+          <Section
+            id="ai"
+            title="AI"
+            description="A language model reads the transcript and picks the clips. Choose between DeepSeek Direct API, OpenRouter, or local Ollama models."
+          >
+            <Field label="AI Provider" hint="Select the active LLM provider for finding clips">
+              <Select
+                value={currentProvider}
+                onChange={(e) => {
+                  update('llm_provider')(e.target.value)
+                  setTestResult(null)
+                }}
+              >
+                {AI_PROVIDERS.map(([val, label]) => (
+                  <option key={val} value={val}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
             </Field>
-            <Field label="Default model" hint="Type to search. Fast, cheap long-context models work well; a one-hour video is about 15k tokens.">
-              <ModelInput value={draft.llm_model ?? ''} onChange={update('llm_model')} />
-            </Field>
+
+            {currentProvider === 'deepseek' && (
+              <>
+                <Field
+                  label="DeepSeek API key"
+                  hint={<Ext href="https://platform.deepseek.com/api_keys">Get a DeepSeek key</Ext>}
+                >
+                  {secret('deepseek_api_key', 'sk-…')}
+                </Field>
+                <Field
+                  label="Model"
+                  hint="e.g. deepseek-chat (DeepSeek-V3) or deepseek-reasoner (DeepSeek-R1)"
+                >
+                  <ModelInput
+                    provider="deepseek"
+                    placeholder="deepseek-chat"
+                    value={draft.deepseek_model ?? ''}
+                    onChange={update('deepseek_model')}
+                  />
+                </Field>
+                <Field
+                  label="Base URL"
+                  hint="Official DeepSeek endpoint. Default: https://api.deepseek.com"
+                >
+                  {text('deepseek_base_url', 'https://api.deepseek.com')}
+                </Field>
+              </>
+            )}
+
+            {currentProvider === 'openrouter' && (
+              <>
+                <Field
+                  label="OpenRouter API key"
+                  hint={<Ext href="https://openrouter.ai/keys">Create a key</Ext>}
+                >
+                  {secret('openrouter_api_key', 'sk-or-…')}
+                </Field>
+                <Field
+                  label="Default model"
+                  hint="Type to search. Fast, cheap long-context models work well; e.g. google/gemini-3.8-flash"
+                >
+                  <ModelInput
+                    provider="openrouter"
+                    placeholder="google/gemini-3.8-flash"
+                    value={draft.openrouter_model || draft.llm_model || ''}
+                    onChange={(v) => {
+                      update('llm_model')(v)
+                      update('openrouter_model')(v)
+                    }}
+                  />
+                </Field>
+              </>
+            )}
+
+            {currentProvider === 'ollama' && (
+              <>
+                <Field
+                  label="Base URL"
+                  hint="Default: http://localhost:11434 (In Docker use http://host.docker.internal:11434)"
+                >
+                  {text('ollama_base_url', 'http://localhost:11434')}
+                </Field>
+                <Field
+                  label="Model"
+                  hint="Model installed locally in Ollama (e.g. llama3.2, qwen2.5, deepseek-r1)"
+                >
+                  <ModelInput
+                    provider="ollama"
+                    placeholder="llama3.2"
+                    value={draft.ollama_model ?? ''}
+                    onChange={update('ollama_model')}
+                  />
+                </Field>
+              </>
+            )}
+
+            <div className="flex flex-col gap-2 rounded border border-line bg-surface p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-semibold text-ink">
+                    Test {currentProvider === 'deepseek' ? 'DeepSeek' : currentProvider === 'ollama' ? 'Ollama' : 'OpenRouter'} Connection
+                  </p>
+                  <p className="text-[12px] text-muted">Verify credentials, model availability, and connectivity without leaving Settings.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="line"
+                  loading={testConn.isPending}
+                  onClick={onTestConnection}
+                >
+                  Test connection
+                </Button>
+              </div>
+              {testResult && (
+                <div
+                  className={cn(
+                    'mt-2 flex items-start gap-2 rounded px-3 py-2 text-[13px]',
+                    testResult.ok ? 'bg-ok/10 text-ok' : 'bg-bad/10 text-bad',
+                  )}
+                >
+                  <span className="font-bold">{testResult.ok ? '✓' : '✗'}</span>
+                  <div className="leading-snug">{testResult.message}</div>
+                </div>
+              )}
+            </div>
+
             <Field label="Transcription model" hint="faster-whisper runs locally and downloads the model on first use.">
               <Select value={draft.whisper_model ?? 'small'} onChange={(e) => update('whisper_model')(e.target.value)}>
                 {WHISPER_MODELS.map(([value, label]) => (

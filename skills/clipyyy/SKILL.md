@@ -13,13 +13,23 @@ clipyyy is a local CLI that downloads or reads a video, transcribes it, asks an 
 clipyyy doctor --json
 ```
 
-Every check with `"required": true` must be `"ok": true`. If the `llm` check fails, ask the user for an OpenRouter key and save it:
+Every check with `"required": true` must be `"ok": true`. If the `llm` check fails, configure one of the supported providers:
 
 ```bash
+# DeepSeek Direct API
+clipyyy config set llm_provider deepseek
+clipyyy config set deepseek_api_key <key>
+
+# Or OpenRouter
+clipyyy config set llm_provider openrouter
 clipyyy config set openrouter_api_key <key>
+
+# Or local Ollama
+clipyyy config set llm_provider ollama
+clipyyy config set ollama_model llama3.2
 ```
 
-Never print or log the key.
+Never print or log keys.
 
 ## Make clips
 
@@ -36,7 +46,8 @@ Useful options:
 - `--broll` (needs a Pexels key), `--no-face-tracking`
 - `--language en` to skip language detection
 - `--instructions "..."` to steer the selection, for example "funny moments only" or "end captions with Follow for part 2"
-- `--model <openrouter-model-id>` to override the default
+- `--provider deepseek|openrouter|ollama` to override the LLM provider
+- `--model <model-id>` to override the model (e.g. `deepseek-chat`, `google/gemini-3.8-flash`, `llama3.2`)
 
 The command runs in the foreground; long videos take several minutes, mostly for transcription. Progress lines go to stderr and the result is JSON on stdout:
 

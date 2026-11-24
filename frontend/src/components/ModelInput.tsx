@@ -4,10 +4,25 @@ import { api } from '../api'
 import { Input } from './ui'
 
 /** Free-text model id with suggestions loaded from the provider the first time it is focused. */
-export function ModelInput({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder?: string }) {
+export function ModelInput({
+  value,
+  onChange,
+  placeholder,
+  provider,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  provider?: string
+}) {
   const id = useId()
   const [wanted, setWanted] = useState(false)
-  const models = useQuery({ queryKey: ['models'], queryFn: api.models, enabled: wanted, staleTime: 60 * 60 * 1000 })
+  const models = useQuery({
+    queryKey: ['models', provider],
+    queryFn: () => api.models(provider),
+    enabled: wanted,
+    staleTime: 60 * 60 * 1000,
+  })
   return (
     <>
       <Input value={value} placeholder={placeholder} list={id} onFocus={() => setWanted(true)} onChange={(e) => onChange(e.target.value)} />

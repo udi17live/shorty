@@ -8,10 +8,33 @@ from clipyyy.publish import storage_configured
 from clipyyy.source import js_runtime
 
 
+def _llm_check() -> tuple[bool, str]:
+    provider = (get_setting("llm_provider") or "openrouter").lower().strip()
+    if provider == "deepseek":
+        key = get_setting("deepseek_api_key")
+        model = get_setting("deepseek_model") or "deepseek-chat"
+        return (
+            bool(key),
+            f"deepseek · {model}" if key else "add a DeepSeek API key to find clips",
+        )
+    if provider == "ollama":
+        base_url = get_setting("ollama_base_url") or "http://localhost:11434"
+        model = get_setting("ollama_model") or "llama3.2"
+        return True, f"ollama · {model} ({base_url})"
+
+    # openrouter and default
+    key = get_setting("openrouter_api_key")
+    model = get_setting("openrouter_model") or get_setting("llm_model") or "google/gemini-3.8-flash"
+    return (
+        bool(key),
+        f"openrouter · {model}" if key else "add an OpenRouter API key to find clips",
+    )
+
+
 def checks() -> list[dict]:
     found = find_ffmpeg()
     ffmpeg, libass = found.ffmpeg, found.libass
-    llm_key = bool(get_setting("openrouter_api_key"))
+    llm_ok, llm_detail = _llm_check()
     runtime = js_runtime()
     return [
         _check(
@@ -38,11 +61,9 @@ def checks() -> list[dict]:
         ),
         _check(
             "llm",
-            llm_key,
+            llm_ok,
             True,
-            f"{get_setting('llm_provider')} · {get_setting('llm_model')}"
-            if llm_key
-            else "add an OpenRouter API key to find clips",
+            llm_detail,
         ),
         _check(
             "broll",
