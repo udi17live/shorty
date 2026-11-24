@@ -12,24 +12,72 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import Cookie, FastAPI, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from clipyyy import __version__, db, pipeline
-from clipyyy.config import PACKAGE_DIR, SETTINGS, get_setting, mask, uploads_dir
+from clipyyy.config import (
+    PACKAGE_DIR,
+    SETTINGS,
+    get_setting,
+    load_dotenv_if_present,
+    mask,
+    uploads_dir,
+)
+from clipyyy.database import ensure_schema, migrate_legacy_sqlite_if_needed
 from clipyyy.doctor import checks
+from clipyyy.platforms import PlatformConnectorFactory, PlatformError
 from clipyyy.publish import BufferClient, PublishError, PublishMode, publish_clip
+from clipyyy.security import generate_random_token
+from clipyyy.services import channels as channel_service
+from clipyyy.services import projects as project_service
+from clipyyy.services.projects import ProjectError
 from clipyyy.worker import Worker
 
 WEB_DIR = PACKAGE_DIR / "web"
+OAUTH_BINDING_COOKIE = "shorty_oauth_binding"
+SAFE_OAUTH_ERROR_CODES = {
+    "cancelled",
+    "state_missing",
+    "state_mismatch",
+    "state_reused",
+    "state_expired",
+    "unauthorized",
+    "invalid_project",
+    "oauth_denied",
+    "invalid_code",
+    "exchange_failed",
+    "discovery_failed",
+    "no_channel",
+    "provider_unavailable",
+    "not_configured",
+    "server_error",
+    "unsupported_platform",
+}
+
+
+class CreateProjectRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=1000)
+
+
+class UpdateProjectRequest(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=1000)
+
+
+class CompleteChannelSelectionRequest(BaseModel):
+    selection_id: str = Field(..., min_length=1, max_length=64)
+    external_channel_ids: list[str] = Field(..., min_length=1, max_length=50)
 
 
 class CreateRuns(BaseModel):
     sources: list[str] = Field(..., min_length=1, max_length=50)
     options: pipeline.ClipOptions = pipeline.ClipOptions()
+    project_id: str | None = None
 
 
 class RetryRun(BaseModel):
@@ -56,10 +104,13 @@ class PublishRequest(BaseModel):
 
 
 def create_app(start_worker: bool = True) -> FastAPI:
+    load_dotenv_if_present()
     worker = Worker() if start_worker else None
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        ensure_schema()
+        migrate_legacy_sqlite_if_needed()
         if worker:
             worker.start()
         yield
@@ -155,6 +206,186 @@ def create_app(start_worker: bool = True) -> FastAPI:
         except Exception as exc:
             raise HTTPException(502, f"Could not load models: {exc}") from exc
 
+    # ── projects & connected channels ────────────────────────────────────────
+
+    @app.get("/api/platforms")
+    def list_platforms() -> list[dict]:
+        return PlatformConnectorFactory.list_platforms()
+
+    @app.get("/api/projects")
+    def list_projects() -> list[dict]:
+        return project_service.list_projects()
+
+    @app.post("/api/projects", status_code=201)
+    def create_project(body: CreateProjectRequest) -> dict:
+        try:
+            return project_service.create_project(body.name, body.description)
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}")
+    def get_project(project_id: str) -> dict:
+        try:
+            return project_service.get_project(project_id)
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}")
+    def update_project(project_id: str, body: UpdateProjectRequest) -> dict:
+        try:
+            return project_service.update_project(
+                project_id, name=body.name, description=body.description
+            )
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+
+    @app.delete("/api/projects/{project_id}")
+    def delete_project(project_id: str) -> dict:
+        try:
+            project_service.delete_project(project_id)
+            return {"deleted": project_id}
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}/runs")
+    def list_project_runs(project_id: str) -> list[dict]:
+        try:
+            project_service.get_project(project_id)
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+        return db.list_runs(project_id=project_id)
+
+    @app.post("/api/projects/{project_id}/runs")
+    def create_project_runs(project_id: str, body: CreateRuns) -> list[dict]:
+        try:
+            project_service.get_project(project_id)
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+        runs = [
+            db.create_run(source.strip(), body.options.model_dump(), project_id=project_id)
+            for source in body.sources
+            if source.strip()
+        ]
+        if worker:
+            worker.wake()
+        return runs
+
+    @app.get("/api/projects/{project_id}/channels")
+    def list_project_channels(project_id: str) -> list[dict]:
+        try:
+            return channel_service.list_project_channels(project_id)
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+
+    @app.post("/api/projects/{project_id}/channels/connect/{platform}")
+    def connect_project_channel(
+        project_id: str, platform: str, request: Request, response: Response
+    ) -> dict[str, str]:
+        binding_secret = generate_random_token(32)
+        try:
+            result = channel_service.initiate_oauth(project_id, platform, binding_secret)
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+        except PlatformError as exc:
+            status = 503 if exc.code == "not_configured" else 400
+            raise HTTPException(status, str(exc)) from exc
+        response.set_cookie(
+            key=OAUTH_BINDING_COOKIE,
+            value=binding_secret,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+            max_age=900,
+            path="/",
+        )
+        return result
+
+    @app.get("/api/oauth/{platform}/callback")
+    def oauth_callback(
+        platform: str,
+        code: str | None = None,
+        state: str | None = None,
+        error: str | None = None,
+        shorty_oauth_binding: str | None = Cookie(default=None, alias=OAUTH_BINDING_COOKIE),
+    ) -> RedirectResponse:
+        from urllib.parse import urlencode
+
+        result = channel_service.handle_oauth_callback(
+            platform,
+            code=code,
+            state=state,
+            error=error,
+            binding_secret=shorty_oauth_binding,
+        )
+        # Strictly internal relative redirect path — never accept arbitrary redirect targets.
+        base_path = (
+            f"/projects/{result.project_id}/channels" if result.project_id else "/projects"
+        )
+        params: dict[str, str] = {
+            "oauth_status": result.outcome,
+            "platform": result.platform,
+        }
+        if result.outcome == "connected" and result.channel:
+            params["channel"] = str(result.channel["id"])
+        elif result.outcome == "select" and result.selection_id:
+            params["selection"] = result.selection_id
+        elif result.outcome == "error":
+            safe_code = (
+                result.error_code
+                if result.error_code in SAFE_OAUTH_ERROR_CODES
+                else "exchange_failed"
+            )
+            params["reason"] = safe_code
+
+        return RedirectResponse(url=f"{base_path}?{urlencode(params)}", status_code=302)
+
+    @app.get("/api/projects/{project_id}/channels/connect/{platform}/pending/{selection_id}")
+    def get_pending_channel_selection(
+        project_id: str,
+        platform: str,
+        selection_id: str,
+        shorty_oauth_binding: str | None = Cookie(default=None, alias=OAUTH_BINDING_COOKIE),
+    ) -> dict[str, Any]:
+        try:
+            return channel_service.get_pending_selection(
+                project_id, platform, selection_id, shorty_oauth_binding
+            )
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+
+    @app.post("/api/projects/{project_id}/channels/connect/{platform}/complete")
+    def complete_channel_selection(
+        project_id: str,
+        platform: str,
+        body: CompleteChannelSelectionRequest,
+        shorty_oauth_binding: str | None = Cookie(default=None, alias=OAUTH_BINDING_COOKIE),
+    ) -> list[dict[str, Any]]:
+        try:
+            return channel_service.complete_pending_selection(
+                project_id,
+                platform,
+                body.selection_id,
+                body.external_channel_ids,
+                shorty_oauth_binding,
+            )
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+
+    @app.post("/api/projects/{project_id}/channels/{channel_id}/disconnect")
+    def disconnect_project_channel(project_id: str, channel_id: str) -> dict[str, Any]:
+        try:
+            return channel_service.disconnect_channel(project_id, channel_id, revoke=False)
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+
+    @app.delete("/api/projects/{project_id}/channels/{channel_id}")
+    def remove_project_channel(project_id: str, channel_id: str) -> dict[str, str]:
+        try:
+            channel_service.remove_channel(project_id, channel_id)
+            return {"deleted": channel_id}
+        except ProjectError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+
     # ── runs ─────────────────────────────────────────────────────────────────
 
     @app.post("/api/uploads")
@@ -168,8 +399,13 @@ def create_app(start_worker: bool = True) -> FastAPI:
 
     @app.post("/api/runs")
     def create_runs(body: CreateRuns) -> list[dict]:
+        if body.project_id:
+            try:
+                project_service.get_project(body.project_id)
+            except ProjectError as exc:
+                raise HTTPException(exc.status_code, str(exc)) from exc
         runs = [
-            db.create_run(source.strip(), body.options.model_dump())
+            db.create_run(source.strip(), body.options.model_dump(), project_id=body.project_id)
             for source in body.sources
             if source.strip()
         ]
@@ -178,8 +414,13 @@ def create_app(start_worker: bool = True) -> FastAPI:
         return runs
 
     @app.get("/api/runs")
-    def list_runs() -> list[dict]:
-        return db.list_runs()
+    def list_runs(project_id: str | None = None) -> list[dict]:
+        if project_id is not None:
+            try:
+                project_service.get_project(project_id)
+            except ProjectError as exc:
+                raise HTTPException(exc.status_code, str(exc)) from exc
+        return db.list_runs(project_id=project_id)
 
     @app.get("/api/runs/{run_id}")
     def get_run(run_id: str) -> dict:
@@ -232,6 +473,7 @@ def create_app(start_worker: bool = True) -> FastAPI:
         clip = db.get_clip(clip_id)
         if not clip or not clip["file_path"] or not Path(clip["file_path"]).exists():
             raise HTTPException(404, "Clip file not found")
+        _run_or_404(clip["run_id"])
         path = Path(clip["file_path"])
         return FileResponse(
             path,
@@ -247,6 +489,7 @@ def create_app(start_worker: bool = True) -> FastAPI:
         clip = db.get_clip(clip_id)
         if not clip or not clip["file_path"] or not Path(clip["file_path"]).exists():
             raise HTTPException(404, "Clip file not found")
+        _run_or_404(clip["run_id"])
         poster = poster_path(Path(clip["file_path"]))
         if not poster.exists():
             make_poster(Path(clip["file_path"]), 1.0)
@@ -335,6 +578,10 @@ def _run_or_404(run_id: str) -> dict[str, Any]:
     run = db.get_run(run_id)
     if run is None:
         raise HTTPException(404, "Run not found")
+    try:
+        project_service.get_project(run["project_id"])
+    except ProjectError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
     return run
 
 

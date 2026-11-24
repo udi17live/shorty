@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from clipyyy.config import get_setting
+from clipyyy.database import check_database_connection
 from clipyyy.media import find_ffmpeg, install_hint
+from clipyyy.platforms import PlatformConnectorFactory
 from clipyyy.publish import storage_configured
 from clipyyy.source import js_runtime
 
@@ -36,7 +38,10 @@ def checks() -> list[dict]:
     ffmpeg, libass = found.ffmpeg, found.libass
     llm_ok, llm_detail = _llm_check()
     runtime = js_runtime()
+    db_ok, db_detail = check_database_connection()
+    yt_ok, yt_detail = PlatformConnectorFactory.get_connector("youtube").is_configured()
     return [
+        _check("database", db_ok, True, db_detail),
         _check(
             "ffmpeg",
             bool(ffmpeg and found.ffprobe),
@@ -83,10 +88,17 @@ def checks() -> list[dict]:
             False,
             "S3 storage set" if storage_configured() else "optional: needed to publish to Buffer",
         ),
+        _check(
+            "youtube_oauth",
+            yt_ok,
+            False,
+            "Google OAuth & encryption ready" if yt_ok else f"optional: {yt_detail}",
+        ),
     ]
 
 
 LABELS = {
+    "database": "Database",
     "ffmpeg": "FFmpeg",
     "captions": "Captions",
     "downloads": "YouTube downloads",
@@ -94,6 +106,7 @@ LABELS = {
     "broll": "B-roll",
     "buffer": "Buffer",
     "storage": "Storage",
+    "youtube_oauth": "YouTube OAuth",
 }
 
 

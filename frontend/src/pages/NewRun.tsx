@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, FileVideo, KeyRound, Upload, X } from 'lucide-react'
 import { useRef, useState, type DragEvent, type ReactNode } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { api, DEFAULT_OPTIONS, type AspectRatio, type CaptionStyle, type ClipOptions } from '../api'
 import { ModelInput } from '../components/ModelInput'
 import { Button, Eyebrow, Field, Input, Panel, Select, Stepper, Textarea, Toggle, cn } from '../components/ui'
+import { useProject } from '../context/ProjectContext'
 
 const LANGUAGES = [
   ['auto', 'Detect automatically'],
@@ -60,6 +61,7 @@ const LENGTH_PRESETS: [number, number][] = [
 export function NewRunPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { activeProjectId, activeProject, isLoading: projectsLoading } = useProject()
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [options, setOptions] = useState<ClipOptions>(DEFAULT_OPTIONS)
@@ -83,14 +85,21 @@ export function NewRunPage() {
 
   const submit = useMutation({
     mutationFn: async () => {
+      if (!activeProjectId) {
+        throw new Error('Create or select a project first')
+      }
       const uploaded = []
       for (const file of files) uploaded.push((await api.upload(file)).source)
-      return api.createRuns([...urls, ...uploaded], options)
+      return api.createProjectRuns(activeProjectId, [...urls, ...uploaded], options)
     },
     onSuccess: (runs) => {
       queryClient.invalidateQueries({ queryKey: ['runs'] })
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      if (activeProjectId) {
+        queryClient.invalidateQueries({ queryKey: ['project-runs', activeProjectId] })
+      }
       toast.success(runs.length === 1 ? 'Clipping started' : `${runs.length} videos queued`)
-      navigate(runs.length === 1 ? `/runs/${runs[0].id}` : '/runs')
+      navigate(runs.length === 1 ? `/runs/${runs[0].id}` : activeProjectId ? `/projects/${activeProjectId}/runs` : '/runs')
     },
     onError: (error) => toast.error(error.message),
   })
@@ -106,7 +115,7 @@ export function NewRunPage() {
   return (
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-4">
-        <Eyebrow>New run</Eyebrow>
+        <Eyebrow>New run{activeProject ? ` · ${activeProject.name}` : ''}</Eyebrow>
         <h1 className="display max-w-3xl text-[44px] sm:text-[56px]">
           Long video in, shorts out.
         </h1>
@@ -118,6 +127,14 @@ export function NewRunPage() {
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex flex-col gap-6">
+          {!projectsLoading && !activeProject && (
+            <Panel className="flex items-center justify-between gap-4 border-l-4 border-l-acid p-4 text-sm">
+              <span>Create a project first so your runs and channels have a home.</span>
+              <Link to="/projects" className="label shrink-0 text-ink underline underline-offset-4">
+                Create project
+              </Link>
+            </Panel>
+          )}
           {needsKey && <ConnectModel provider={activeProvider} onSaved={() => queryClient.invalidateQueries()} />}
           {blockers.map((c) => (
             <Panel key={c.name} className="border-bad/40 bg-bad-soft p-4 text-sm text-bad">
@@ -199,7 +216,7 @@ export function NewRunPage() {
                 variant="acid"
                 size="lg"
                 className="ml-auto disabled:!bg-ink-3 disabled:!text-white/35 disabled:!opacity-100"
-                disabled={count === 0 || !!needsKey || blockers.length > 0}
+                disabled={count === 0 || !!needsKey || blockers.length > 0 || !activeProjectId}
                 loading={submit.isPending}
                 onClick={() => submit.mutate()}
               >

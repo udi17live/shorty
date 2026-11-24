@@ -1,12 +1,38 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-clipyyy}
+      POSTGRES_USER: ${POSTGRES_USER:-clipyyy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clipyyy}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clipyyy} -d ${POSTGRES_DB:-clipyyy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
   clipyyy:
     build: .
     image: clipyyy
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/data
     environment:
+      # Database (PostgreSQL)
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-clipyyy}:${POSTGRES_PASSWORD:-clipyyy}@postgres:5432/${POSTGRES_DB:-clipyyy}}
+      # OAuth Credential Encryption & Google OAuth 2.0 (YouTube)
+      - OAUTH_ENCRYPTION_KEY=${OAUTH_ENCRYPTION_KEY:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_OAUTH_REDIRECT_URI=${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:8000/api/oauth/youtube/callback}
       # LLM Provider settings (can also be configured in the web UI under Settings)
       - LLM_PROVIDER=${LLM_PROVIDER:-}
       - CLIPYYY_LLM_PROVIDER=${CLIPYYY_LLM_PROVIDER:-}
@@ -26,3 +52,6 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+volumes:
+  postgres_data:

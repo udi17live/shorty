@@ -24,6 +24,8 @@ export function RunDetailPage() {
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['run', runId] })
     queryClient.invalidateQueries({ queryKey: ['runs'] })
+    queryClient.invalidateQueries({ queryKey: ['project-runs'] })
+    queryClient.invalidateQueries({ queryKey: ['projects'] })
   }
   const retry = useMutation({
     mutationFn: (fromStage?: string) => api.retry(runId, fromStage),
@@ -37,6 +39,8 @@ export function RunDetailPage() {
     mutationFn: () => api.deleteRun(runId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['runs'] })
+      queryClient.invalidateQueries({ queryKey: ['project-runs'] })
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
       navigate('/runs')
     },
     onError: (e) => toast.error(e.message),
@@ -61,6 +65,14 @@ export function RunDetailPage() {
       <header className="flex flex-wrap items-end gap-6">
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <Eyebrow>
+            {data.project_name ? (
+              <>
+                <Link to={`/projects/${data.project_id}/runs`} className="hover:text-ink">
+                  {data.project_name}
+                </Link>
+                {' · '}
+              </>
+            ) : null}
             Run {data.id} · {timeAgo(data.created_at)}
           </Eyebrow>
           <h1 className="display line-clamp-2 text-4xl">{sourceLabel(data)}</h1>

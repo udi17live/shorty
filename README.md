@@ -44,10 +44,44 @@ It has a web app for people and a JSON command line for scripts and AI coding ag
 ```bash
 git clone https://github.com/T3-Venture-Labs-Limited/clipyyy
 cd clipyyy
+cp .env.example .env
+# Generate OAUTH_ENCRYPTION_KEY if connecting YouTube channels
 docker compose up -d
 ```
 
-Open http://localhost:8000, paste your [OpenRouter API key](https://openrouter.ai/keys) when asked, paste a video link and click **Find clips**. Clips, runs and settings are saved in `./data`.
+Docker Compose runs clipyyy alongside a private PostgreSQL 16 service (`postgres_data` volume) and runs Alembic migrations automatically on startup.
+
+Open http://localhost:8000, paste your [OpenRouter API key](https://openrouter.ai/keys) when asked, paste a video link and click **Find clips**. Clips, runs and media files are saved in `./data`, and relational data (projects, runs, connected channels, encrypted OAuth credentials) is stored in PostgreSQL.
+
+### Connecting YouTube Channels (Google OAuth 2.0)
+
+Each **Project** in clipyyy has a **Channels** tab where you can connect one or more YouTube channels via OAuth 2.0.
+
+1. Generate an application-level encryption key (`OAUTH_ENCRYPTION_KEY`) for encrypting OAuth access and refresh tokens at rest:
+   ```bash
+   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+   ```
+2. In the [Google Cloud Console](https://console.cloud.google.com/):
+   - Create or select a Google Cloud project.
+   - Enable **YouTube Data API v3**.
+   - Configure the **OAuth consent screen** (add the `https://www.googleapis.com/auth/youtube.readonly` scope and add test users if in Testing mode).
+   - Create an **OAuth client ID** of type **Web application**.
+   - Add your authorized redirect URI (for local development: `http://localhost:8000/api/oauth/youtube/callback`).
+3. Set these variables in `.env` (never commit `.env` or real credentials):
+   ```env
+   OAUTH_ENCRYPTION_KEY=<generated-fernet-key>
+   GOOGLE_CLIENT_ID=<your-google-client-id>
+   GOOGLE_CLIENT_SECRET=<your-google-client-secret>
+   GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/oauth/youtube/callback
+   ```
+4. Restart the app (`docker compose up -d` or `uv run clipyyy serve`), open **Projects → Channels**, and click **Connect** on YouTube.
+
+### Database & Migrations
+
+clipyyy uses SQLAlchemy + Alembic (`alembic.ini`, `alembic/versions/`):
+- With `DATABASE_URL` set (default in Docker Compose), it connects to PostgreSQL.
+- Without `DATABASE_URL`, local CLI/dev uses SQLite at `<CLIPYYY_HOME>/clipyyy.db`.
+- Run `uv run alembic upgrade head` (or `uv run clipyyy db upgrade`) to apply migrations manually.
 
 ### From source
 

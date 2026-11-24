@@ -9,7 +9,7 @@ export const STAGE_ORDER = ['download', 'transcribe', 'select', 'plan', 'broll',
 export function useRuns() {
   return useQuery({
     queryKey: ['runs'],
-    queryFn: api.runs,
+    queryFn: () => api.runs(),
     refetchInterval: (query) => (query.state.data?.some((r) => r.status === 'queued' || r.status === 'running') ? 2000 : 15000),
   })
 }
@@ -68,6 +68,7 @@ export function RunsPage() {
                   <td className="max-w-0 px-5 py-4">
                     <p className="truncate font-medium">{sourceLabel(run)}</p>
                     <p className="label mt-1 truncate text-faint">
+                      {run.project_name ? `${run.project_name} · ` : ''}
                       {sourceHost(run.source)}
                       {run.status === 'failed' && run.error ? <span className="normal-case tracking-normal text-bad"> · {run.error}</span> : null}
                     </p>

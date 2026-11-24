@@ -18,8 +18,69 @@ export interface ClipOptions {
   model: string | null
 }
 
+export interface Project {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  owner_id: string | null
+  is_default: boolean
+  run_count: number
+  channel_count: number
+  created_at: string
+  updated_at: string
+}
+
+export type ChannelStatus = 'connected' | 'expired' | 'reauthorization_required' | 'disconnected' | 'error'
+
+export interface PlatformDescriptor {
+  id: string
+  name: string
+  description: string
+  status: 'available' | 'coming_soon'
+  configured: boolean
+  config_error: string | null
+  supports_oauth: boolean
+  supports_multi_channel: boolean
+}
+
+export interface ConnectedChannel {
+  id: string
+  project_id: string
+  platform: string
+  external_account_id: string | null
+  external_channel_id: string
+  display_name: string
+  handle: string | null
+  avatar_url: string | null
+  status: ChannelStatus
+  status_message: string | null
+  metadata: Record<string, unknown>
+  last_connected_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PendingChannelCandidate {
+  external_channel_id: string
+  external_account_id: string | null
+  display_name: string
+  handle: string | null
+  avatar_url: string | null
+  metadata: Record<string, unknown>
+}
+
+export interface PendingChannelSelection {
+  selection_id: string
+  project_id: string
+  platform: string
+  channels: PendingChannelCandidate[]
+}
+
 export interface Run {
   id: string
+  project_id: string
+  project_name?: string
   source: string
   title: string | null
   status: RunStatus
@@ -175,10 +236,52 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body ?? {}),
     }),
-  runs: () => request<Run[]>('/api/runs'),
+  projects: () => request<Project[]>('/api/projects'),
+  project: (id: string) => request<Project>(`/api/projects/${id}`),
+  createProject: (body: { name: string; description?: string | null }) =>
+    request<Project>('/api/projects', { method: 'POST', body: JSON.stringify(body) }),
+  updateProject: (id: string, body: { name?: string; description?: string | null }) =>
+    request<Project>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteProject: (id: string) => request<{ deleted: string }>(`/api/projects/${id}`, { method: 'DELETE' }),
+  projectRuns: (projectId: string) => request<Run[]>(`/api/projects/${projectId}/runs`),
+  createProjectRuns: (projectId: string, sources: string[], options: ClipOptions) =>
+    request<Run[]>(`/api/projects/${projectId}/runs`, {
+      method: 'POST',
+      body: JSON.stringify({ sources, options }),
+    }),
+  platforms: () => request<PlatformDescriptor[]>('/api/platforms'),
+  projectChannels: (projectId: string) => request<ConnectedChannel[]>(`/api/projects/${projectId}/channels`),
+  connectChannel: (projectId: string, platform: string) =>
+    request<{ authorization_url: string }>(`/api/projects/${projectId}/channels/connect/${platform}`, {
+      method: 'POST',
+    }),
+  pendingChannelSelection: (projectId: string, platform: string, selectionId: string) =>
+    request<PendingChannelSelection>(
+      `/api/projects/${projectId}/channels/connect/${platform}/pending/${encodeURIComponent(selectionId)}`,
+    ),
+  completeChannelSelection: (
+    projectId: string,
+    platform: string,
+    body: { selection_id: string; external_channel_ids: string[] },
+  ) =>
+    request<ConnectedChannel[]>(`/api/projects/${projectId}/channels/connect/${platform}/complete`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  disconnectChannel: (projectId: string, channelId: string) =>
+    request<ConnectedChannel>(`/api/projects/${projectId}/channels/${channelId}/disconnect`, {
+      method: 'POST',
+    }),
+  removeChannel: (projectId: string, channelId: string) =>
+    request<{ deleted: string }>(`/api/projects/${projectId}/channels/${channelId}`, { method: 'DELETE' }),
+  runs: (projectId?: string) =>
+    request<Run[]>(projectId ? `/api/runs?project_id=${encodeURIComponent(projectId)}` : '/api/runs'),
   run: (id: string) => request<RunDetail>(`/api/runs/${id}`),
-  createRuns: (sources: string[], options: ClipOptions) =>
-    request<Run[]>('/api/runs', { method: 'POST', body: JSON.stringify({ sources, options }) }),
+  createRuns: (sources: string[], options: ClipOptions, projectId?: string | null) =>
+    request<Run[]>('/api/runs', {
+      method: 'POST',
+      body: JSON.stringify({ sources, options, ...(projectId ? { project_id: projectId } : {}) }),
+    }),
   upload: (file: File) => {
     const form = new FormData()
     form.append('file', file)

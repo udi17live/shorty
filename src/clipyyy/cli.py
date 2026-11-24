@@ -15,6 +15,9 @@ from clipyyy import __version__
 
 
 def main(argv: list[str] | None = None) -> int:
+    from clipyyy.config import load_dotenv_if_present
+
+    load_dotenv_if_present()
     parser = build_parser()
     args = parser.parse_args(argv)
     logging.basicConfig(
@@ -128,10 +131,25 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--at", help="ISO time for --mode schedule, e.g. 2026-11-05T18:00:00Z")
     pb.add_argument("--json", action="store_true")
     pb.set_defaults(func=cmd_publish)
+
+    db_cmd = sub.add_parser("db", help="database maintenance commands")
+    db_sub = db_cmd.add_subparsers(metavar="action")
+    db_up = db_sub.add_parser("upgrade", help="run Alembic database migrations to head")
+    db_up.set_defaults(func=cmd_db_upgrade)
+    db_cmd.set_defaults(func=cmd_db_upgrade)
     return p
 
 
 # ── commands ─────────────────────────────────────────────────────────────────
+
+
+def cmd_db_upgrade(_args: argparse.Namespace) -> int:
+    from clipyyy.database import migrate_legacy_sqlite_if_needed, run_migrations
+
+    run_migrations()
+    migrated = migrate_legacy_sqlite_if_needed()
+    print("Database schema upgraded to head." + (" Legacy SQLite data imported." if migrated else ""))
+    return 0
 
 
 def cmd_serve(args: argparse.Namespace) -> int:

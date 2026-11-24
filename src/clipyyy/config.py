@@ -13,11 +13,58 @@ from pathlib import Path
 PACKAGE_DIR = Path(__file__).resolve().parent
 
 
+def load_dotenv_if_present(path: Path | None = None) -> None:
+    """Load key=value pairs from a local .env file without overriding existing env vars."""
+    if os.environ.get("CLIPYYY_NO_DOTENV"):
+        return
+    env_file = path or (Path.cwd() / ".env")
+    if not env_file.is_file():
+        return
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[7:].strip()
+        val = val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in {"'", '"'}:
+            val = val[1:-1]
+        if key:
+            os.environ.setdefault(key, val)
+
+
 def home() -> Path:
     """Root folder for the database, runs and model caches (``CLIPYYY_HOME``)."""
     path = Path(os.environ.get("CLIPYYY_HOME", Path.home() / ".clipyyy")).expanduser()
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def database_url() -> str:
+    """Configured SQLAlchemy database URL (PostgreSQL in Docker/prod, SQLite fallback locally)."""
+    explicit = os.environ.get("DATABASE_URL", "").strip()
+    if explicit:
+        return explicit
+    return f"sqlite:///{home() / 'clipyyy.db'}"
+
+
+def is_postgres_url(url: str) -> bool:
+    return url.startswith("postgresql")
+
+
+def get_oauth_encryption_key() -> str:
+    return os.environ.get("OAUTH_ENCRYPTION_KEY", "").strip()
+
+
+def get_google_oauth_config() -> tuple[str, str, str]:
+    """Return ``(client_id, client_secret, redirect_uri)`` from environment variables."""
+    return (
+        os.environ.get("GOOGLE_CLIENT_ID", "").strip(),
+        os.environ.get("GOOGLE_CLIENT_SECRET", "").strip(),
+        os.environ.get("GOOGLE_OAUTH_REDIRECT_URI", "").strip(),
+    )
 
 
 def runs_dir() -> Path:

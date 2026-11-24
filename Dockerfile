@@ -15,12 +15,16 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # yt-dlp needs a JavaScript runtime to solve YouTube player challenges
 COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
 WORKDIR /app
-COPY pyproject.toml uv.lock README.md LICENSE ./
+COPY pyproject.toml uv.lock README.md LICENSE alembic.ini ./
+COPY alembic/ alembic/
 COPY src/ src/
 COPY --from=web /app/src/clipyyy/web src/clipyyy/web
-RUN uv sync --frozen --no-dev
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+    && uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH" \
     CLIPYYY_HOME=/data
 VOLUME /data
 EXPOSE 8000
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["clipyyy", "serve", "--host", "0.0.0.0", "--port", "8000"]
