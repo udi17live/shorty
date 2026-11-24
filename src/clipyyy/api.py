@@ -85,7 +85,11 @@ def create_app(start_worker: bool = True) -> FastAPI:
         for key, spec in SETTINGS.items():
             stored = db.get_setting(key)
             value = get_setting(key)
-            source = "app" if stored else "env" if os.environ.get(spec.env) else "default"
+            has_env = bool(
+                os.environ.get(spec.env, "").strip()
+                or any(os.environ.get(alt, "").strip() for alt in spec.fallback_envs)
+            )
+            source = "app" if (stored and stored.strip()) else "env" if has_env else "default"
             result.append(
                 {
                     "key": key,

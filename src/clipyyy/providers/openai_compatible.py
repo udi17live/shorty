@@ -163,7 +163,8 @@ class OpenAICompatibleProvider(LLMProvider):
             "max_tokens": 5,
         }
         try:
-            response = self._client.post("/chat/completions", json=body)
+            ping_timeout = min(self.timeout, 15.0)
+            response = self._client.post("/chat/completions", json=body, timeout=ping_timeout)
             self._handle_response_errors(response)
             payload = response.json()
             if "error" in payload:

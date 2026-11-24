@@ -119,6 +119,15 @@ def test_configuration_defaults_and_env(monkeypatch):
     db.set_setting("llm_provider", "ollama")
     assert get_setting("llm_provider") == "ollama"
 
+    # Empty env var should fall back to default or fallback env
+    db.set_setting("llm_provider", None)
+    monkeypatch.setenv("LLM_PROVIDER", "")
+    monkeypatch.setenv("CLIPYYY_LLM_PROVIDER", "ollama")
+    assert get_setting("llm_provider") == "ollama"
+
+    monkeypatch.setenv("CLIPYYY_LLM_PROVIDER", "")
+    assert get_setting("llm_provider") == "openrouter"
+
     # DeepSeek settings
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-ds-env")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://proxy.deepseek.com")
@@ -126,6 +135,10 @@ def test_configuration_defaults_and_env(monkeypatch):
     assert get_setting("deepseek_api_key") == "sk-ds-env"
     assert get_setting("deepseek_base_url") == "https://proxy.deepseek.com"
     assert get_setting("deepseek_model") == "deepseek-reasoner"
+
+    # DeepSeek empty env falls back to default
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "")
+    assert get_setting("deepseek_base_url") == "https://api.deepseek.com"
 
     # Ollama settings
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama-host:11434")

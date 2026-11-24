@@ -39,40 +39,64 @@ class SettingSpec:
 
 SETTINGS: dict[str, SettingSpec] = {
     "llm_provider": SettingSpec(
-        "CLIPYYY_LLM_PROVIDER",
+        "LLM_PROVIDER",
         "openrouter",
         description="Active LLM provider (deepseek, openrouter, ollama)",
-        fallback_envs=("LLM_PROVIDER",),
+        fallback_envs=("CLIPYYY_LLM_PROVIDER",),
     ),
     "openrouter_api_key": SettingSpec(
-        "OPENROUTER_API_KEY", secret=True, description="OpenRouter API key"
+        "OPENROUTER_API_KEY",
+        secret=True,
+        description="OpenRouter API key",
+        fallback_envs=("CLIPYYY_OPENROUTER_API_KEY",),
     ),
     "openrouter_base_url": SettingSpec(
-        "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1", description="OpenRouter base URL"
+        "OPENROUTER_BASE_URL",
+        "https://openrouter.ai/api/v1",
+        description="OpenRouter base URL",
+        fallback_envs=("CLIPYYY_OPENROUTER_BASE_URL",),
     ),
     "openrouter_model": SettingSpec(
-        "OPENROUTER_MODEL", "", description="OpenRouter model (overrides default model)"
+        "OPENROUTER_MODEL",
+        "",
+        description="OpenRouter model (overrides default model)",
+        fallback_envs=("CLIPYYY_OPENROUTER_MODEL",),
     ),
     "deepseek_api_key": SettingSpec(
-        "DEEPSEEK_API_KEY", secret=True, description="DeepSeek API key"
+        "DEEPSEEK_API_KEY",
+        secret=True,
+        description="DeepSeek API key",
+        fallback_envs=("CLIPYYY_DEEPSEEK_API_KEY",),
     ),
     "deepseek_base_url": SettingSpec(
-        "DEEPSEEK_BASE_URL", "https://api.deepseek.com", description="DeepSeek API base URL"
+        "DEEPSEEK_BASE_URL",
+        "https://api.deepseek.com",
+        description="DeepSeek API base URL",
+        fallback_envs=("CLIPYYY_DEEPSEEK_BASE_URL",),
     ),
     "deepseek_model": SettingSpec(
-        "DEEPSEEK_MODEL", "deepseek-chat", description="DeepSeek model name"
+        "DEEPSEEK_MODEL",
+        "deepseek-chat",
+        description="DeepSeek model name",
+        fallback_envs=("CLIPYYY_DEEPSEEK_MODEL",),
     ),
     "ollama_base_url": SettingSpec(
-        "OLLAMA_BASE_URL", "http://localhost:11434", description="Ollama server base URL"
+        "OLLAMA_BASE_URL",
+        "http://localhost:11434",
+        description="Ollama server base URL",
+        fallback_envs=("CLIPYYY_OLLAMA_BASE_URL",),
     ),
     "ollama_model": SettingSpec(
-        "OLLAMA_MODEL", "llama3.2", description="Ollama model name"
+        "OLLAMA_MODEL",
+        "llama3.2",
+        description="Ollama model name",
+        fallback_envs=("CLIPYYY_OLLAMA_MODEL",),
     ),
     "llm_model": SettingSpec(
         "CLIPYYY_LLM_MODEL",
         "google/gemini-3.8-flash",
         description="Default model used to pick clips",
-        fallback_envs=("LLM_MODEL",),
+        fallback_envs=("LLM_MODEL", "OPENROUTER_MODEL"),
     ),
     "whisper_model": SettingSpec("CLIPYYY_WHISPER_MODEL", "small", description="faster-whisper model size"),
     "pexels_api_key": SettingSpec("PEXELS_API_KEY", secret=True, description="Pexels key for B-roll"),
@@ -113,13 +137,15 @@ def get_setting(key: str) -> str:
         return ""
     spec = SETTINGS[key]
     value = db.get_setting(key)
-    if value:
-        return value
-    if spec.env in os.environ:
-        return os.environ[spec.env]
+    if value and value.strip():
+        return value.strip()
+    val = os.environ.get(spec.env, "").strip()
+    if val:
+        return val
     for alt in spec.fallback_envs:
-        if alt in os.environ:
-            return os.environ[alt]
+        alt_val = os.environ.get(alt, "").strip()
+        if alt_val:
+            return alt_val
     return spec.default
 
 

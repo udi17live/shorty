@@ -7,9 +7,9 @@ import { ModelInput } from '../components/ModelInput'
 import { Button, Eyebrow, Field, Input, Panel, Select, Textarea, cn } from '../components/ui'
 
 const AI_PROVIDERS = [
-  ['deepseek', 'DeepSeek (Direct API)'],
+  ['deepseek', 'DeepSeek Direct API'],
   ['openrouter', 'OpenRouter'],
-  ['ollama', 'Ollama (Local models)'],
+  ['ollama', 'Ollama'],
 ] as const
 
 const WHISPER_MODELS = [
@@ -192,7 +192,7 @@ export function SettingsPage() {
             {currentProvider === 'deepseek' && (
               <>
                 <Field
-                  label="DeepSeek API key"
+                  label="API Key"
                   hint={<Ext href="https://platform.deepseek.com/api_keys">Get a DeepSeek key</Ext>}
                 >
                   {secret('deepseek_api_key', 'sk-…')}
@@ -220,13 +220,13 @@ export function SettingsPage() {
             {currentProvider === 'openrouter' && (
               <>
                 <Field
-                  label="OpenRouter API key"
+                  label="API Key"
                   hint={<Ext href="https://openrouter.ai/keys">Create a key</Ext>}
                 >
                   {secret('openrouter_api_key', 'sk-or-…')}
                 </Field>
                 <Field
-                  label="Default model"
+                  label="Model"
                   hint="Type to search. Fast, cheap long-context models work well; e.g. google/gemini-3.8-flash"
                 >
                   <ModelInput
@@ -272,14 +272,24 @@ export function SettingsPage() {
                   </p>
                   <p className="text-[12px] text-muted">Verify credentials, model availability, and connectivity without leaving Settings.</p>
                 </div>
-                <Button
-                  type="button"
-                  variant="line"
-                  loading={testConn.isPending}
-                  onClick={onTestConnection}
-                >
-                  Test connection
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="line"
+                    loading={testConn.isPending}
+                    onClick={onTestConnection}
+                  >
+                    Test connection
+                  </Button>
+                  <Button
+                    type="button"
+                    loading={save.isPending}
+                    disabled={!dirty}
+                    onClick={() => save.mutate()}
+                  >
+                    {dirty ? 'Save' : 'Saved'}
+                  </Button>
+                </div>
               </div>
               {testResult && (
                 <div
