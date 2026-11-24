@@ -6,9 +6,9 @@ from typing import Any
 import httpx
 import pytest
 
-from clipyyy import db
-from clipyyy.config import get_setting
-from clipyyy.llm import (
+from shortyy import db
+from shortyy.config import get_setting
+from shortyy.llm import (
     DeepSeekProvider,
     LLMAuthenticationError,
     LLMConnectionError,
@@ -23,10 +23,10 @@ from clipyyy.llm import (
     OpenRouterProvider,
     get_llm,
 )
-from clipyyy.llm import (
+from shortyy.llm import (
     test_connection as do_test_connection,
 )
-from clipyyy.selection import select_clips
+from shortyy.selection import select_clips
 
 
 def json_reply(content: Any, status: int = 200) -> httpx.Response:
@@ -107,6 +107,7 @@ def test_factory_extensibility_custom_provider():
 def test_configuration_defaults_and_env(monkeypatch):
     # Backward compatibility: default is openrouter
     db.set_setting("llm_provider", None)
+    monkeypatch.delenv("SHORTYY_LLM_PROVIDER", raising=False)
     monkeypatch.delenv("CLIPYYY_LLM_PROVIDER", raising=False)
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     assert get_setting("llm_provider") == "openrouter"
@@ -122,8 +123,12 @@ def test_configuration_defaults_and_env(monkeypatch):
     # Empty env var should fall back to default or fallback env
     db.set_setting("llm_provider", None)
     monkeypatch.setenv("LLM_PROVIDER", "")
-    monkeypatch.setenv("CLIPYYY_LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("SHORTYY_LLM_PROVIDER", "ollama")
     assert get_setting("llm_provider") == "ollama"
+
+    monkeypatch.setenv("SHORTYY_LLM_PROVIDER", "")
+    monkeypatch.setenv("CLIPYYY_LLM_PROVIDER", "deepseek")
+    assert get_setting("llm_provider") == "deepseek"
 
     monkeypatch.setenv("CLIPYYY_LLM_PROVIDER", "")
     assert get_setting("llm_provider") == "openrouter"

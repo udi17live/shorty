@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "clipyyy"
+name = "shortyy"
 version = "0.1.0"
 description = "Free, open-source AI video clipper: turn long videos and podcasts into TikTok, Reels and YouTube Shorts clips with captions. Self-hosted OpusClip alternative."
 readme = "README.md"
@@ -41,7 +41,7 @@ Homepage = "https://github.com/T3-Venture-Labs-Limited/clipyyy"
 Issues = "https://github.com/T3-Venture-Labs-Limited/clipyyy/issues"
 
 [project.scripts]
-clipyyy = "clipyyy.cli:main"
+shortyy = "shortyy.cli:main"
 
 [dependency-groups]
 dev = [
@@ -51,10 +51,10 @@ dev = [
 
 [tool.hatch.build]
 # The built web UI is gitignored but must ship in the wheel.
-artifacts = ["src/clipyyy/web/"]
+artifacts = ["src/shortyy/web/"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/clipyyy"]
+packages = ["src/shortyy"]
 
 
 [tool.pytest.ini_options]

@@ -1,4 +1,4 @@
-from clipyyy.captions import STYLES, _ass_color, _ts, chunk_words, clip_words, emphasis_index, write_ass
+from shortyy.captions import STYLES, _ass_color, _ts, chunk_words, clip_words, emphasis_index, write_ass
 
 
 def test_clip_words_are_rebased(transcript):

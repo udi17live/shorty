@@ -3,8 +3,8 @@ import json
 import httpx
 import pytest
 
-from clipyyy import db
-from clipyyy.publish import BufferClient, PublishError, platform_metadata, publish_clip
+from shortyy import db
+from shortyy.publish import BufferClient, PublishError, platform_metadata, publish_clip
 
 
 def buffer_transport(log):

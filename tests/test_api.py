@@ -1,8 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from clipyyy import db
-from clipyyy.api import create_app
+from shortyy import db
+from shortyy.api import create_app
 
 
 @pytest.fixture

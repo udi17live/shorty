@@ -137,7 +137,7 @@ export function SettingsPage() {
           <h1 className="display text-4xl">
             Settings
           </h1>
-          <p className="max-w-xl text-[15px] text-body">Everything is stored locally in clipyyy.db. Environment variables work too and show up here.</p>
+          <p className="max-w-xl text-[15px] text-body">Everything is stored locally in shortyy.db. Environment variables work too and show up here.</p>
         </div>
         <Button loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>
           {dirty ? 'Save changes' : 'Saved'}
@@ -327,7 +327,7 @@ export function SettingsPage() {
             id="downloads"
             title="Downloads"
             tag="If YouTube blocks you"
-            description="YouTube sometimes asks a network to prove it is not a bot. clipyyy can then borrow your browser's YouTube login, read locally by yt-dlp."
+            description="YouTube sometimes asks a network to prove it is not a bot. Shortyy can then borrow your browser's YouTube login, read locally by yt-dlp."
           >
             <Field label="Use cookies from browser" hint="Pick the browser where you are signed in to YouTube. Close it first if downloads fail to read cookies.">
               <Select value={draft.ytdlp_cookies_from_browser ?? ''} onChange={(e) => update('ytdlp_cookies_from_browser')(e.target.value)}>

@@ -1,5 +1,5 @@
-from clipyyy import db
-from clipyyy.source import base_args, explain_error
+from shortyy import db
+from shortyy.source import base_args, explain_error
 
 
 def test_bot_check_gets_actionable_message():

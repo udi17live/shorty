@@ -11,19 +11,19 @@ from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from clipyyy import db
-from clipyyy.api import create_app
-from clipyyy.database import dispose_engines, run_migrations, session_scope
-from clipyyy.models import ConnectedChannel, OAuthCredential, OAuthState, utcnow
-from clipyyy.platforms import (
+from shortyy import db
+from shortyy.api import create_app
+from shortyy.database import dispose_engines, run_migrations, session_scope
+from shortyy.models import ConnectedChannel, OAuthCredential, OAuthState, utcnow
+from shortyy.platforms import (
     PlatformConnectorFactory,
     ReauthorizationRequiredError,
     YouTubeConnector,
 )
-from clipyyy.security import decrypt_secret, hash_token
-from clipyyy.services import channels as channel_service
-from clipyyy.services import projects as project_service
-from clipyyy.services.projects import ProjectAccessError
+from shortyy.security import decrypt_secret, hash_token
+from shortyy.services import channels as channel_service
+from shortyy.services import projects as project_service
+from shortyy.services.projects import ProjectAccessError
 
 
 @pytest.fixture
@@ -577,7 +577,7 @@ def test_alembic_upgrade_on_legacy_sqlite_database(tmp_path):
     try:
         with session_scope(url) as session:
             assert session.execute(select(ConnectedChannel)).all() == []
-            from clipyyy.models import Run
+            from shortyy.models import Run
 
             migrated_run = session.get(Run, "r1")
             assert migrated_run is not None

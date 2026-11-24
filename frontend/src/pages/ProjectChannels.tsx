@@ -11,7 +11,7 @@ import { useProjectOptional } from '../context/ProjectContext'
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   state_missing: 'Missing OAuth verification state. Please try connecting again.',
-  state_mismatch: 'Security verification failed. Please start the connection from Shorty.',
+  state_mismatch: 'Security verification failed. Please start the connection from Shortyy.',
   state_reused: 'This authorization link has already been used. Please try connecting again.',
   state_expired: 'Your authorization session expired. Please try connecting again.',
   unauthorized: 'You are not authorized to connect this channel.',

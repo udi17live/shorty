@@ -1,7 +1,7 @@
 import pytest
 
-from clipyyy.llm import LLMError
-from clipyyy.selection import build_prompt, clean_caption, clean_hashtags, select_clips, snap, validate_clips
+from shortyy.llm import LLMError
+from shortyy.selection import build_prompt, clean_caption, clean_hashtags, select_clips, snap, validate_clips
 
 OPTIONS = {"clip_count": 3, "min_seconds": 15, "max_seconds": 30, "instructions": ""}
 
@@ -245,7 +245,7 @@ def test_select_clips_retries_on_invalid_json_with_specific_prompt(transcript):
         model = "mock"
 
         def complete_json(self, system, user, schema, name):
-            from clipyyy.providers.base import LLMStructuredOutputError
+            from shortyy.providers.base import LLMStructuredOutputError
             recorded_users.append(user)
             if len(recorded_users) == 1:
                 raise LLMStructuredOutputError("Model returned multiple JSON values")

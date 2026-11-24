@@ -120,7 +120,7 @@ export function NewRunPage() {
           Long video in, shorts out.
         </h1>
         <p className="max-w-xl text-[15px] leading-relaxed text-body">
-          Paste a link or drop a recording. clipyyy transcribes it on your machine, lets an AI pick the moments worth posting, then
+          Paste a link or drop a recording. Shortyy transcribes it on your machine, lets an AI pick the moments worth posting, then
           reframes and captions each one.
         </p>
       </header>
@@ -386,7 +386,7 @@ function ConnectModel({ onSaved, provider = 'openrouter' }: { onSaved: () => voi
         <div>
           <p className="font-semibold">Connect a model to start</p>
           <p className="text-[13px] leading-relaxed text-muted">
-            clipyyy picks clips with {providerLabel}. Get a key on{' '}
+            Shortyy picks clips with {providerLabel}. Get a key on{' '}
             <a href={keyUrl} target="_blank" rel="noreferrer" className="text-ink underline underline-offset-2">
               {providerLabel}
             </a>

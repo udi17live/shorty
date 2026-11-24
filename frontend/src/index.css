@@ -2,7 +2,7 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/jetbrains-mono";
 
-/* Archivo Black is also the caption font clipyyy burns into videos, so the UI and the output match. */
+/* Archivo Black is also the caption font Shortyy burns into videos, so the UI and the output match. */
 @font-face {
   font-family: "Archivo Black";
   src: url("./ArchivoBlack-Regular.ttf") format("truetype");

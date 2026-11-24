@@ -26,7 +26,7 @@ PY
 fi
 
 echo "Running database migrations..."
-clipyyy db upgrade
+shortyy db upgrade
 
 exec "$@"
 

@@ -4,7 +4,7 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN mkdir -p ../src/clipyyy && npm run build
+RUN mkdir -p ../src/shortyy && npm run build
 
 # Runtime: Python + ffmpeg (with libass for captions)
 FROM python:3.12-slim
@@ -18,13 +18,13 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md LICENSE alembic.ini ./
 COPY alembic/ alembic/
 COPY src/ src/
-COPY --from=web /app/src/clipyyy/web src/clipyyy/web
+COPY --from=web /app/src/shortyy/web src/shortyy/web
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
     && uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH" \
-    CLIPYYY_HOME=/data
+    SHORTYY_HOME=/data
 VOLUME /data
 EXPOSE 8000
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["clipyyy", "serve", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["shortyy", "serve", "--host", "0.0.0.0", "--port", "8000"]

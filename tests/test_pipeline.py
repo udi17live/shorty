@@ -1,4 +1,4 @@
-from clipyyy import db, pipeline
+from shortyy import db, pipeline
 
 
 def test_failed_run_resumes_from_failed_stage(monkeypatch):

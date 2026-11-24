@@ -2,10 +2,17 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def clipyyy_home(tmp_path, monkeypatch):
-    """Every test gets an empty CLIPYYY_HOME and no keys from the developer's environment."""
-    monkeypatch.setenv("CLIPYYY_HOME", str(tmp_path / "home"))
-    for var in ("OPENROUTER_API_KEY", "PEXELS_API_KEY", "BUFFER_API_KEY", "CLIPYYY_LLM_MODEL"):
+def shortyy_home(tmp_path, monkeypatch):
+    """Every test gets an empty SHORTYY_HOME and no keys from the developer's environment."""
+    monkeypatch.setenv("SHORTYY_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("CLIPYYY_HOME", raising=False)
+    for var in (
+        "OPENROUTER_API_KEY",
+        "PEXELS_API_KEY",
+        "BUFFER_API_KEY",
+        "SHORTYY_LLM_MODEL",
+        "CLIPYYY_LLM_MODEL",
+    ):
         monkeypatch.delenv(var, raising=False)
     return tmp_path / "home"
 

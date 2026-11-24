@@ -2,10 +2,10 @@
 
 import pytest
 
-from clipyyy.media import find_ffmpeg, has_audio, probe, run_ffmpeg
-from clipyyy.reframe import center_plan
-from clipyyy.render import render_clips
-from clipyyy.timeline import plan_timeline
+from shortyy.media import find_ffmpeg, has_audio, probe, run_ffmpeg
+from shortyy.reframe import center_plan
+from shortyy.render import render_clips
+from shortyy.timeline import plan_timeline
 
 pytestmark = pytest.mark.skipif(not find_ffmpeg().ffmpeg, reason="needs ffmpeg")
 

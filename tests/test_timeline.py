@@ -1,4 +1,4 @@
-from clipyyy.timeline import (
+from shortyy.timeline import (
     MAX_WINDOW,
     MIN_WINDOW,
     assign_windows,

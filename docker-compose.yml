@@ -15,9 +15,9 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  clipyyy:
+  shortyy:
     build: .
-    image: clipyyy
+    image: shortyy
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,8 +35,10 @@ services:
       - GOOGLE_OAUTH_REDIRECT_URI=${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:8000/api/oauth/youtube/callback}
       # LLM Provider settings (can also be configured in the web UI under Settings)
       - LLM_PROVIDER=${LLM_PROVIDER:-}
+      - SHORTYY_LLM_PROVIDER=${SHORTYY_LLM_PROVIDER:-}
       - CLIPYYY_LLM_PROVIDER=${CLIPYYY_LLM_PROVIDER:-}
       - LLM_MODEL=${LLM_MODEL:-}
+      - SHORTYY_LLM_MODEL=${SHORTYY_LLM_MODEL:-}
       - CLIPYYY_LLM_MODEL=${CLIPYYY_LLM_MODEL:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-}

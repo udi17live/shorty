@@ -3,8 +3,8 @@ import json
 import httpx
 import pytest
 
-from clipyyy import db
-from clipyyy.llm import (
+from shortyy import db
+from shortyy.llm import (
     PROVIDERS,
     LLMError,
     LLMStructuredOutputError,

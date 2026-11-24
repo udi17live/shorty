@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from clipyyy import media
+from shortyy import media
 
 
 def _fake_ffmpeg(folder: Path, libass: bool) -> Path:
@@ -17,6 +17,7 @@ def test_find_ffmpeg_prefers_a_build_that_can_draw_captions(tmp_path: Path, monk
     plain = _fake_ffmpeg(tmp_path / "usr-bin", libass=False)  # like Homebrew's standard ffmpeg
     full = _fake_ffmpeg(tmp_path / "ffmpeg-full", libass=True)  # like Homebrew's keg-only ffmpeg-full
     monkeypatch.setenv("PATH", str(plain.parent))
+    monkeypatch.delenv("SHORTYY_FFMPEG", raising=False)
     monkeypatch.delenv("CLIPYYY_FFMPEG", raising=False)
     monkeypatch.delenv("HOMEBREW_PREFIX", raising=False)
     monkeypatch.setattr(media, "HOMEBREW_DIRS", (str(full.parent),))
@@ -31,7 +32,7 @@ def test_find_ffmpeg_prefers_a_build_that_can_draw_captions(tmp_path: Path, monk
         assert found.ffmpeg == str(plain) and found.libass is False
         assert "ffmpeg" in media.install_hint()
 
-        monkeypatch.setenv("CLIPYYY_FFMPEG", str(full.parent))
+        monkeypatch.setenv("SHORTYY_FFMPEG", str(full.parent))
         media.find_ffmpeg.cache_clear()
         assert media.find_ffmpeg().ffmpeg == str(full)
     finally:

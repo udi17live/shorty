@@ -12,7 +12,7 @@ import { cn, sourceLabel } from './ui'
 export function Wordmark({ className }: { className?: string }) {
   return (
     <span className={cn('font-display text-[22px] leading-none tracking-[-0.04em]', className)}>
-      clip<span className="px-sm inline-block bg-acid px-[3px] pb-0.5 text-ink">yyy</span>
+      short<span className="px-sm inline-block bg-acid px-[3px] pb-0.5 text-ink">yy</span>
     </span>
   )
 }

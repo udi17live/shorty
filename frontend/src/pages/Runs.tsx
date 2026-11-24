@@ -44,7 +44,7 @@ export function RunsPage() {
           <p className="p-6 text-sm text-muted">Loading…</p>
         ) : !runs.data?.length ? (
           <Empty title="No runs yet" action={<Link to="/" className="label text-ink underline underline-offset-4">Clip your first video</Link>}>
-            Paste a link or drop a file and clipyyy will cut it into shorts.
+            Paste a link or drop a file and Shortyy will cut it into shorts.
           </Empty>
         ) : (
           <table className="w-full text-left text-sm">

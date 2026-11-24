@@ -18,7 +18,7 @@ jobs:
       - run: uv run pytest -q
 
   # Macs. Homebrew's standard ffmpeg has no libass. Installing it first reproduces the
-  # common case: ffmpeg-full then sits beside it, off the PATH, and clipyyy must find it.
+  # common case: ffmpeg-full then sits beside it, off the PATH, and shortyy must find it.
   macos:
     strategy:
       fail-fast: false
@@ -33,8 +33,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: brew install ffmpeg && brew install ffmpeg-full
       - run: uv sync --python 3.12
-      - run: uv run clipyyy doctor || true  # an AI key is not set in CI
-      - run: uv run python -c "from clipyyy.media import find_ffmpeg as f; r = f(); print(r); assert r.libass and 'ffmpeg-full' in r.ffmpeg"
+      - run: uv run shortyy doctor || true  # an AI key is not set in CI
+      - run: uv run python -c "from shortyy.media import find_ffmpeg as f; r = f(); print(r); assert r.libass and 'ffmpeg-full' in r.ffmpeg"
       # MediaPipe (face tracking) is installed everywhere except Intel Macs.
       - run: uv run python -c "import faster_whisper, importlib.util as u, platform, sys; intel = sys.platform == 'darwin' and platform.machine() == 'x86_64'; found = u.find_spec('mediapipe') is not None; print('mediapipe', found); assert found != intel"
       - run: uv run pytest -q

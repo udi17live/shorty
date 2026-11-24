@@ -1,11 +1,11 @@
-# clipyyy
+# Shortyy
 
-> clipyyy is a free, open-source AI video clipper and self-hosted alternative to OpusClip, Vizard and Klap. It turns long videos and podcasts into short vertical clips with animated captions for TikTok, Instagram Reels and YouTube Shorts. It transcribes locally with faster-whisper, picks the best moments with any LLM on OpenRouter, reframes on the speaker with face tracking, and renders with ffmpeg. It has a web app and a JSON CLI for scripts and AI agents. MIT licensed.
+> Shortyy is a free, open-source AI video clipper and self-hosted alternative to OpusClip, Vizard and Klap. It turns long videos and podcasts into short vertical clips with animated captions for TikTok, Instagram Reels and YouTube Shorts. It transcribes locally with faster-whisper, picks the best moments with any LLM on OpenRouter, reframes on the speaker with face tracking, and renders with ffmpeg. It has a web app and a JSON CLI for scripts and AI agents. MIT licensed.
 
 ## Docs
 
 - [README](README.md): features, installation (Docker or uv), CLI usage, settings, FAQ
-- [Agent skill](skills/clipyyy/SKILL.md): how an AI agent should run clipyyy from the command line
+- [Agent skill](skills/shortyy/SKILL.md): how an AI agent should run shortyy from the command line
 - [AGENTS.md](AGENTS.md): codebase map for contributors and coding agents
 
 ## Key facts

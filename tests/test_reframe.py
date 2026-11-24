@@ -1,4 +1,4 @@
-from clipyyy.reframe import Face, center_plan, dominant, face_box, smooth
+from shortyy.reframe import Face, center_plan, dominant, face_box, smooth
 
 
 def test_center_plan_for_landscape_source():
